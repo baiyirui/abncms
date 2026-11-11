@@ -1,0 +1,27 @@
+# 依赖与构建产物
+node_modules/
+dist/
+.wrangler/
+.mf/
+
+# 本地环境变量与密钥（切勿提交）
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# 部署配置：包含 Cloudflare account_id / D1 / KV 的真实资源 ID。
+# 请复制 wrangler.example.jsonc -> wrangler.jsonc 后自行填写。
+wrangler.jsonc
+
+# 临时诊断 / 一次性脚本产物
+_*.sql
+_*.json
+_*.mjs
+_*.txt
+*.log
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,27 @@
+{
+  "name": "gexiong_cms",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "格熊 CMS：基于 Cloudflare Workers + D1 + KV + Workers AI + Vectorize 的 Serverless 内容发布系统，图片走外部图床代理",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "setup:remote": "python scripts/setup_remote.py",
+    "smoke": "python scripts/smoke_test.py http://127.0.0.1:8787",
+    "build": "wrangler deploy --dry-run --outdir=dist",
+    "types": "wrangler types",
+    "typecheck": "tsc --noEmit",
+    "db:local": "wrangler d1 execute cf-press-db --local --file=./schema.sql",
+    "db:remote": "wrangler d1 execute cf-press-db --remote --file=./schema.sql",
+    "db:seed": "wrangler d1 execute cf-press-db --remote --file=./seed.sql"
+  },
+  "dependencies": {
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261019.1",
+    "typescript": "^5.7.2",
+    "wrangler": "^4.152.0"
+  }
+}

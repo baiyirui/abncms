@@ -1,0 +1,9 @@
+# 本地开发变量：复制为 .dev.vars 后生效（.dev.vars 已被 .gitignore 忽略）
+# 仅当用户表为空、首次登录时用它创建初始管理员；登录后请立刻在后台「设置」里修改密码。
+ADMIN_PASSWORD=change-me-before-first-login
+
+# 外部图床（可选）。不配置时媒体库上传不可用，其余功能不受影响。
+# 生产环境请改用 `npx wrangler secret put IMGBED_TOKEN`，不要写进配置文件。
+# IMGBED_BASE_URL=https://your-image-host.example.com
+# IMGBED_TOKEN=your-image-host-api-token
+# IMGBED_TOKEN_NAME=your-token-name
