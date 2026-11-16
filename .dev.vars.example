@@ -7,3 +7,9 @@ ADMIN_PASSWORD=change-me-before-first-login
 # IMGBED_BASE_URL=https://your-image-host.example.com
 # IMGBED_TOKEN=your-image-host-api-token
 # IMGBED_TOKEN_NAME=your-token-name
+
+# 后台写入敏感配置（图床 API Token）的 AES-GCM 主密钥。
+# 不配则后台为「仅环境变量模式」：可改图床地址，但不能在页面里写入 Token。
+# 生产环境务必用 `npx wrangler secret put CONFIG_ENCRYPTION_KEY`，不要写进 vars。
+# 生成方式：openssl rand -hex 32
+# CONFIG_ENCRYPTION_KEY=replace-with-a-32-byte-random-hex-string

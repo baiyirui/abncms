@@ -1,7 +1,8 @@
 -- ============================================================================
---  cf-press · D1 (SQLite) 数据库结构
+--  ABNcms · D1 (SQLite) 数据库结构（全新安装用）
 --  执行：npx wrangler d1 execute cf-press-db --remote --file=./schema.sql
---  幂等：全部使用 CREATE TABLE IF NOT EXISTS，可重复执行
+--  幂等：全部使用 CREATE TABLE IF NOT EXISTS / INSERT OR IGNORE，可重复执行
+--  已有旧库升级请改用：python scripts/migrate.py
 -- ============================================================================
 
 -- ── 账号 ───────────────────────────────────────────────────────────────────
@@ -92,6 +93,13 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT DEFAULT ''
 );
 
+-- ── 结构版本（供 scripts/migrate.py 判断增量升级）─────────────────────────
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version     TEXT PRIMARY KEY,
+  description TEXT DEFAULT '',
+  applied_at  TEXT DEFAULT (datetime('now'))
+);
+
 -- ── 访问统计（原始明细，Cron 定期清理 30 天前数据）─────────────────────────
 CREATE TABLE IF NOT EXISTS page_views (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,22 +117,34 @@ CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5(
   title, excerpt, content_md, content='posts', content_rowid='id', tokenize='unicode61'
 );
 
--- ── 初始分类（与格熊一致）─────────────────────────────────────────────────
+-- ── 初始分类（中性示例，可自行增删）─────────────────────────────────────
 INSERT OR IGNORE INTO categories (id, name, slug, description, sort_order) VALUES
-  (1, '免费资源', 'mfzy', '精选免费可商用的软件、素材与工具', 1),
-  (2, '字体资源', 'ztzy', '免费商用中文字体与字体使用技巧', 2),
-  (3, '工具技巧', 'gjjq', '效率工具与实用技巧', 3),
-  (4, '热门资讯', 'rmzx', '行业动态与热点资讯', 4),
-  (5, '生活妙招', 'shmz', '轻松搞定生活小麻烦', 5),
-  (6, '经验分享', 'jyfx', '踩坑记录与经验总结', 6);
+  (1, '技术笔记', 'tech', '工程实践与踩坑记录', 1),
+  (2, '产品观察', 'product', '产品设计与行业观察', 2),
+  (3, '随笔', 'essay', '生活与思考', 3),
+  (4, '资源分享', 'resources', '工具、素材与资源', 4),
+  (5, '使用教程', 'tutorial', '上手指南与操作说明', 5),
+  (6, '站点公告', 'notice', '更新与公告', 6);
 
 -- ── 默认站点设置 ───────────────────────────────────────────────────────────
 INSERT OR IGNORE INTO settings (key, value) VALUES
-  ('site_name',        '格熊'),
-  ('site_description', '免费商用资源 · 字体 · AI 工具 · 数码技巧 · 生活妙招'),
-  ('site_keywords',    '免费资源,字体资源,工具技巧,热门资讯,生活妙招,经验分享,格熊'),
-  ('footer_text',      '© 格熊 gexiong.com · 免费资源与技巧分享'),
+  ('site_name',        'ABNcms'),
+  ('site_description', 'A lightweight CMS on the Cloudflare free tier'),
+  ('site_keywords',    'ABNcms,Cloudflare Workers,D1,CMS'),
+  ('footer_text',      'Powered by ABNcms · Cloudflare Workers + D1'),
   ('posts_per_page',   '10'),
   ('allow_comments',   '1'),
   ('turnstile_secret', '2x0000000000000000000000000000000AA'),
-  ('analytics_enabled','1');
+  ('analytics_enabled','1'),
+  ('site_logo',        ''),
+  ('site_logo_height', '36'),
+  ('imgbed_base_url',  ''),
+  ('imgbed_token_enc', ''),
+  ('imgbed_token_hint',''),
+  ('imgbed_token_name',''),
+  ('imgbed_channel',   '');
+
+-- 全新安装等同于已应用全部历史迁移，后续只需跑新增的 migrations/*.sql
+INSERT OR IGNORE INTO schema_migrations (version, description) VALUES
+  ('001_baseline',      'v0.1 initial schema (cf-press)'),
+  ('002_v0.2_settings', 'v0.2 site logo / image host / analytics settings');

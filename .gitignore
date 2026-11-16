@@ -20,6 +20,10 @@ _*.mjs
 _*.txt
 *.log
 
+# Python 辅助脚本产生的字节码
+__pycache__/
+*.pyc
+
 # 编辑器 / 系统
 .DS_Store
 Thumbs.db

@@ -1,297 +1,233 @@
-# 格熊 CMS（gexiong_cms）
+# ABNcms
 
-> 一套跑在 Cloudflare 边缘网络上的 Serverless 内容发布系统。单 Worker 进程完成前台 SSR、后台管理、API 与定时任务，**不需要服务器、容器或数据库主机**，全部能力落在 Cloudflare 免费计划内。
->
-> 仓库当前为 **私有**，待功能完善后再决定是否公开。
+> 面向 **Cloudflare Workers + D1 + 外部图床** 的免费开源轻量级 CMS。
+> 零服务器、零托管费用、零运行时依赖（仅 Hono），全部能力落在 Cloudflare 免费计划内。
+
+**当前状态**：v0.2 开发中 · 仓库私有 · [MIT](./LICENSE) · [商标声明](./TRADEMARK.md) · [完整产品策划](./ABNcms-PLAN.md)
 
 ---
 
 ## 一、系统介绍
 
-### 1.1 定位与外观
+### 1.1 它是什么
 
-本项目最初为格熊风格内容站（免费商用资源、字体、AI 工具、数码技巧、生活妙招）迁移而设计，因此前台采用格熊式版式：
+一个 Worker 进程完成前台 SSR、后台管理、API 与定时任务：内容存 D1，会话与缓存存 KV，图片上传到任意兼容图床并以外链引用，摘要与语义搜索由 Workers AI + Vectorize 提供。没有服务器、容器或数据库主机，`wrangler deploy` 一条命令上线。
 
-- 顶部横幅 + **两栏布局**：左侧列表式文章流，右侧固定侧栏（热门文章 / 分类目录 / 热门标签）
-- 六个内容栏目：`mfzy` 免费资源、`ztzy` 字体资源、`gjjq` 工具技巧、`rmzx` 热门资讯、`shmz` 生活妙招、`jyfx` 经验分享
-- 文章条目含缩略图、标题、摘要、分类、作者、日期、阅读量、置顶标记；居中分页
-- 站名、描述、关键词、页脚均可在后台「设置」里改，不写死在模板中
+借鉴 Z-Blog 的「小巧 + 主题/应用生态」思路，但不复制它的 PHP 模板、目录安装与账号支付体系 —— 详见[策划文档](./ABNcms-PLAN.md)。
 
-### 1.2 技术架构
+### 1.2 架构
 
 ```
-浏览器
-  │
-  ├─ 页面请求 ──► Cloudflare Worker（Hono SSR）
-  │                 ├─ D1        文章 / 用户 / 分类 / 标签 / 评论 / 设置 / 统计
-  │                 ├─ KV        会话 / 页面缓存 / 侧栏缓存 / 失败限流
-  │                 ├─ Workers AI  摘要、标签、文本向量
-  │                 ├─ Vectorize   语义检索索引
-  │                 ├─ ASSETS      CSS / JS / SVG 静态资源
-  │                 └─ Cron        每日缓存重建与数据清理
-  │
-  └─ 上传图片 ──► POST /api/upload（本站，需登录）
-                      │  Worker 服务端注入 Authorization: Bearer <TOKEN>
-                      ▼
-                   外部图床 POST /upload  ──► 返回完整外链 URL
-                      │
-                      └─ URL 存入 D1 media.key，前台直接引用外链
+浏览器 ──► Cloudflare CDN 缓存（匿名页面命中时直接返回，Worker 不执行）
+              │ 未命中
+              ▼
+        Cloudflare Worker（Hono SSR / 后台 / API / Cron）
+          ├── D1        文章 · 页面 · 用户 · 分类 · 标签 · 评论 · 设置
+          ├── KV        会话 · 设置缓存 · 侧栏缓存 · 限流
+          ├── Workers AI + Vectorize   摘要 / 标签 / 语义搜索
+          └── 外部图床   POST /upload（Token 由 Worker 服务端注入）
 ```
 
-**关键取舍：图片不走 Cloudflare R2。** 上传由 Worker 代理转发到外部图床（兼容 CloudFlare-ImgBed / 自建图床 API），Token 只保存在 Cloudflare Secret 里，绝不下发浏览器。`media.key` 存的是完整外链 URL；`/media/*` 路由仅为历史 R2 记录保留兼容读取。
+### 1.3 免费额度的真实天花板
 
-### 1.3 用到的 Cloudflare 能力
+官方文档核实（2026-10-30 更新），所有日额度 UTC 00:00 重置：
 
-| 服务 | 用途 | 免费额度 |
+| 资源 | 免费额度 | 设计含义 |
 |---|---|---|
-| Workers | 全站 SSR、路由、API、定时任务 | 10 万次请求 / 天 |
-| D1 | 关系数据（SQLite + FTS5 全文检索） | 5 GB 存储 |
-| KV | 登录会话、页面/侧栏缓存、配置缓存、登录失败限流 | 10 万次读 / 天 |
-| Workers AI | AI 摘要、自动标签、bge-m3 向量化 | 每日 1 万 neurons |
-| Vectorize | 1024 维语义搜索索引 | 免费层索引 |
-| Static Assets | 静态资源边缘分发 | 随 Workers |
-| Turnstile | 登录 / 评论人机验证（无感） | 免费 |
-| Cron Triggers | 每日 UTC 03:00 清理与缓存重建 | 免费 |
-| Workers Logs | 可观测性 | 免费额度内 |
+| Workers | 10 万请求/天，**10ms CPU/请求**，50 subrequests | 单次渲染要轻 |
+| D1 | 500 万**行读**/天、10 万行写/天、5 GB | 按**扫描行数**计费，列表必走索引 |
+| KV | 10 万读/天、**仅 1,000 写/天**、1 GB | 前台请求**禁止写 KV** |
+| Workers AI | 每天 1 万 neurons | AI 功能可降级 |
+| R2 | 10 GB/月 | 本项目不使用 |
 
-> 未使用 Durable Objects / Queues / Images，这些需要 Workers 付费计划。
+**因此 ABNcms 的硬约束**：匿名页面走 CDN 缓存；CDN 未命中时单次前台请求 ≤5 次 D1 查询、≤2 次 KV 读。KV 写只发生在低频回源（设置缓存 1 小时、侧栏缓存 30 分钟各最多 1 次）与后台操作，正常浏览路径 **0 次 KV 写、0 次 D1 写**。
 
-### 1.4 数据模型（`schema.sql`）
+### 1.4 「发布后是不是就静态了？」
 
-| 表 | 内容 |
-|---|---|
-| `users` | 管理员账号（PBKDF2 加盐哈希） |
-| `categories` / `tags` | 栏目与标签 |
-| `posts` | 文章主体（Markdown + 渲染后 HTML、封面、摘要、AI 摘要、状态、置顶、阅读量） |
-| `post_tags` | 文章与标签多对多 |
-| `comments` | 评论及审核状态 |
-| `media` | 媒体记录（`key` 为图床完整外链，或历史 R2 key） |
-| `settings` | 站点设置键值对 |
-| `page_views` | 访问明细（供统计与定时清理） |
-| `posts_fts` | FTS5 虚拟表，全文检索 |
+不生成静态文件，但**匿名访问的效果等价**：
 
-`schema.sql` 全部使用 `CREATE TABLE IF NOT EXISTS` / `INSERT OR IGNORE`，可重复执行。
+| 场景 | 谁在响应 | Workers | D1 | KV |
+|---|---|---|---|---|
+| 匿名前台，CDN 命中 | Cloudflare 边缘缓存 | 0 | 0 | 0 |
+| 匿名前台，CDN 未命中 | Worker 回源渲染 | 1 次 | 几次读 | 1–2 次读 |
+| 后台 / 搜索 / 评论 / 登录态 | Worker 动态处理 | 1 次 | 读写 | 读写 |
 
-### 1.5 功能清单
+- 匿名页面响应带 `Cache-Control: public, max-age=0, s-maxage=<TTL>, stale-while-revalidate=<N>`，TTL 按页面类型 120–1800 秒（首页 120s、文章 600s、标签云 1800s）；过期后先回旧内容再后台刷新，避免回源尖峰。
+- **登录态一律 `private, no-store`**：既不串号，也保证草稿不会被缓存后泄露给匿名访客。
+- 免费版 `workers.dev` 无法主动 purge CDN，所以发布/改文后靠 TTL 自然过期；后台编辑器的「查看（绕过缓存）」用 `?t=<时间戳>` 强制回源。绑定自定义域名后可在 Cloudflare 控制台手动清缓存。
+- 浏览量不再由渲染请求写库（CDN 命中时 Worker 根本不执行）。改为前端 25% 采样 beacon → `POST /api/hit` → 服务端权重 ×4 聚合，单次最多 2 行 D1 写；后台「设置 → 开启访问统计」可一键关闭，关闭后前台即为**零写入纯静态供给**。该数字是估算值，不是精确计费指标。
 
-**前台**
-- 首页文章流、分类页、标签页、归档页（按年份分组）、全站搜索
-- 文章详情：Markdown 渲染、AI 摘要、上下篇导航、相关阅读、JSON-LD 结构化数据
-- 搜索先走 D1 FTS5，命中不足时用 Workers AI + Vectorize 语义匹配兜底
-- RSS `/feed.xml`、Sitemap `/sitemap.xml`、`robots.txt`
-- 评论区（Turnstile 防机器人）
+### 1.5 功能一览
 
-**后台 `/admin`**
-- 登录：PBKDF2 校验 + KV 会话 + 同 IP 失败限流 + Turnstile
-- 文章 CRUD：Markdown 双栏编辑器、实时预览、草稿/发布、置顶、分类、标签
-- AI 一键生成摘要与标签
-- 媒体库：上传到外部图床，可选渠道（Backblaze B2 / HuggingFace）、复制链接、删除
-- 分类管理、评论审核、站点设置、修改密码
-- 概览面板：发布数 / 草稿 / 评论 / 阅读量 + 各服务绑定状态
+**前台**：文章流、分类/标签/归档、全文 + 语义搜索、Markdown 渲染、AI 摘要、上下篇、相关阅读、评论、RSS / Sitemap / JSON-LD、两栏侧栏 widget。
 
-**定时任务**（每日 UTC 03:00）
-- 清理 30 天前访问明细、90 天前垃圾评论、刷新缓存、写入心跳
+**后台**：登录（PBKDF2 + KV 会话 + 限流 + Turnstile）、文章 CRUD、Markdown 双栏编辑器、AI 摘要标签、**图床地址与 Token 可视化配置**、**站点 LOGO 上传**、媒体库、分类、评论审核、站点设置、修改密码、概览面板。
+
+**Cron**：每日 UTC 03:00 清理 30 天前访问明细与 90 天前垃圾评论、刷新设置与侧栏缓存、写入心跳。
 
 ---
 
 ## 二、代码介绍
 
-### 2.1 目录结构
+### 2.1 目录
 
 ```
-gexiong_cms/
+abncms/
 ├── src/
-│   ├── index.ts              # 全部路由（前台 / 后台 / API）+ Cron 入口
-│   ├── types.ts              # Env 绑定类型与核心数据结构
+│   ├── index.ts              # 全部路由 + Cron + 缓存策略
+│   ├── types.ts              # Env / SiteSettings / 数据类型
 │   ├── lib/
-│   │   ├── db.ts             # D1 数据访问层、站点设置读写、统计
-│   │   ├── auth.ts           # PBKDF2 哈希、KV 会话、失败限流、Turnstile 校验
-│   │   ├── imgbed.ts         # 外部图床代理：上传 / 删除 / URL 解析
-│   │   ├── markdown.ts       # 零依赖 Markdown 渲染器（输出前转义，防 XSS）
-│   │   ├── ai.ts             # Workers AI 摘要与标签 + Vectorize 向量读写
-│   │   └── util.ts           # slug、分页、Cookie、HTML 转义、客户端 IP
-│   └── views/
-│       ├── layout.ts         # 全站 CSS、页面骨架、登录页
-│       ├── front.ts          # 前台页面模板 + 右侧栏三个 widget
-│       └── admin.ts          # 后台全部页面模板
-├── public/
-│   ├── admin.js              # 后台交互：预览 / AI / 上传 / 复制
-│   ├── banner.svg            # 首页横幅
-│   ├── favicon.svg
-│   └── robots.txt
-├── scripts/
-│   ├── setup_remote.py       # 自动创建远程 D1 / KV / Vectorize 并写回配置
-│   └── smoke_test.py         # 端到端冒烟测试（纯标准库）
-├── schema.sql                # 建表 + 格熊栏目/设置初始化（幂等）
-├── seed.sql                  # 两篇演示文章（可重复执行）
-├── wrangler.example.jsonc    # 配置模板（提交进仓库）
-├── wrangler.jsonc            # 本地真实配置（含账号 ID，已被 .gitignore 忽略）
-├── .dev.vars.example         # 本地环境变量模板
-└── package.json
+│   │   ├── db.ts             # D1 访问层、站点设置读写
+│   │   ├── auth.ts           # 密码哈希、会话、限流、Turnstile
+│   │   ├── crypto.ts         # AES-GCM：后台写入的敏感配置加解密
+│   │   ├── imgbed.ts         # 图床代理：上传 / 删除 / 连通性测试
+│   │   ├── markdown.ts       # 零依赖 Markdown 渲染（转义防 XSS）
+│   │   ├── ai.ts             # Workers AI + Vectorize
+│   │   └── util.ts           # slug / 分页 / Cookie / 转义
+│   └── views/                # layout.ts / front.ts / admin.ts
+├── public/                   # admin.js、banner.svg、favicon.svg、robots.txt
+├── scripts/                  # setup_remote.py / migrate.py / smoke_test.py
+├── migrations/               # 增量迁移 SQL（按版本登记，幂等）
+├── examples/gexiong-seed.sql # 首个 Demo 站点（格熊）的示例数据
+├── schema.sql                # 全新安装：幂等建表 + 版本基线
+├── seed.sql                  # 中性示例数据
+├── wrangler.example.jsonc    # 配置模板
+├── ABNcms-PLAN.md            # 产品策划与路线图
+└── LICENSE / TRADEMARK.md
 ```
 
-### 2.2 模块职责与设计要点
+### 2.2 配置优先级：图床与 LOGO
 
-| 模块 | 关键设计 |
-|---|---|
-| `index.ts` | 单文件集中全部 ~45 条路由；`guard` 中间件统一校验会话；`S(c)` 从上下文取站点设置；`side(env)` 聚合侧栏数据并缓存到 KV 5 分钟，文章/分类变更时主动失效 |
-| `db.ts` | 所有 SQL 集中在此；`getSettings()` 先读 KV（60s），未命中回源 D1，D1 异常时回落到代码内默认值；`saveSettings()` 批量 upsert 并清缓存 |
-| `auth.ts` | PBKDF2-SHA256 / 5000 次（受免费计划 10ms CPU 限制）；会话写 `session:<token>` 到 KV，7 天过期；`verifyTurnstile()` 只要 Site Key 或 Secret 任一侧是测试/空密钥即放行，**避免测试 Site Key 配真实 Secret 把后台锁死** |
-| `imgbed.ts` | 前端只 POST 本站 `/api/upload`，Worker 用 Secret 注入 `Authorization: Bearer` 后转发图床 `/upload`；请求带 `returnFormat=full&responseFormat=object`，可选 `uploadChannel=s3\|huggingface`；返回值兼容数组/对象多种结构；删除走 `POST /api/manage/delete/{fileId}` |
-| `markdown.ts` | 自己实现的轻量渲染器，不引第三方依赖；所有用户输入先 HTML 转义再渲染，杜绝 XSS |
-| `ai.ts` | 摘要/标签用 `@cf/meta/llama-3.2-3b-instruct`，向量用 `@cf/baai/bge-m3`（1024 维）；AI 不可用时优雅降级，不影响发布 |
-| `views/*.ts` | 纯函数返回 HTML 字符串，无客户端框架；`layout.ts` 的 `page()` 根据是否传 `sidebar` 决定单栏/两栏布局 |
+Cloudflare 的 Secret / 环境变量是**部署时绑定、write-only、运行时不可改**。要让后台能改图床，Token 只能落库：
 
-### 2.3 路由一览
+```
+后台 D1（AES-GCM 加密）  >  wrangler vars / Secret  >  未配置
+```
 
-| 分组 | 路由 |
-|---|---|
-| 前台页面 | `/`、`/archive`、`/c/:slug`、`/t/:slug`、`/tags`、`/search`、`/p/:slug` |
-| 前台输出 | `/feed.xml`、`/sitemap.xml`、`/media/*`（历史 R2 兼容） |
-| 认证 | `GET/POST /admin/login`、`GET /admin/logout` |
-| 后台页面 | `/admin`、`/admin/posts`、`/admin/post/new`、`/admin/post/:id`、`/admin/categories`、`/admin/comments`、`/admin/media`、`/admin/settings` |
-| 后台写操作 | `/admin/post/*`、`/admin/category/*`、`/admin/comment/*`、`/admin/media/:id/delete`、`/admin/settings`、`/admin/password` |
-| API | `/api/preview`、`/api/ai/summary-tags`、`/api/upload`、`/api/health` |
-| 其他 | `POST /comment`、Cron `scheduled` 处理器 |
+- 主密钥 `CONFIG_ENCRYPTION_KEY` 用 `wrangler secret put` 注入，**不入库、页面不回显**
+- 后台设置页只显示 Token 后 4 位掩码；输入框留空 = 不修改；可「清除并回退到环境变量」
+- 「测试连接」调图床 `GET /api/channels`，不上传测试图
+- 未配置主密钥时降级为「仅环境变量模式」，后台只能改地址
+- LOGO 复用 `/api/upload` 走图床，不引入 R2；推荐显示高 32–40px、2x 源图 64–80px、宽 ≤200px、SVG 优先
 
-### 2.4 典型请求链路
+### 2.3 典型链路
 
-**发文章**：`POST /admin/post/*` → 校验会话与同源 → Markdown 渲染为 HTML → upsert `posts` / `post_tags` → 更新 FTS 索引 → 清页面缓存与 `side:v1` 侧栏缓存 →（可选）写 Vectorize 向量。
+**发文**：`POST /admin/post/*` → 同源校验 → Markdown 渲染 → upsert `posts` / `post_tags` → 更新向量索引 → 清侧栏 KV 缓存（页面 HTML 由 CDN TTL 兜底）。
 
-**传图片**：编辑器选文件 → `POST /api/upload`（FormData `file` + 可选 `channel`）→ Worker 读 `IMGBED_TOKEN` → 转发图床 → 拿回外链 → 写入 `media` 表 → 返回 `{url, key, channel}` → 前端把 `url` 插入 Markdown，封面为空时自动填充。
+**传图**：`POST /api/upload`（FormData `file` + 可选 `channel`）→ Worker 注入 `Authorization: Bearer` → 图床 `/upload` → 外链写入 `media.key` → 返回 URL 插入编辑器。
 
-**登录**：`POST /admin/login` → 失败限流检查 → 确保管理员存在 → Turnstile 校验 → PBKDF2 校验密码 → 创建 KV 会话 → 下发 `sid` Cookie（HttpOnly + SameSite=Lax + HTTPS 下 Secure）→ 跳转 `/admin`。
+**匿名读文章**：CDN 命中直接返回（0 后端消耗）；未命中时 Worker 读站点设置 / 侧栏 KV 缓存 → 查 D1 → 渲染 HTML → 输出 CDN 缓存头。整条渲染路径**无任何写操作**，浏览量由页面里的 beacon 单独打到 `/api/hit`。
 
-### 2.5 技术栈与构建
+### 2.4 技术栈
 
-- **语言**：TypeScript（严格模式），运行时 Cloudflare Workers（V8 isolate，非 Node.js）
-- **框架**：Hono（仅用路由与上下文，无前端框架）
-- **零运行时依赖**：除 `hono` 外无生产依赖；Markdown、Cookie、分页等全部自实现
-- **构建**：Wrangler 内置 esbuild，`npm run deploy` 一步打包上传
-- **校验**：`npm run typecheck`（`tsc --noEmit`）、`npm run build`（dry-run 产物到 `dist/`）
+TypeScript 严格模式 · Cloudflare Workers（V8 isolate，非 Node）· Hono 路由 · Wrangler 内置 esbuild · 生产依赖仅 `hono`。
+
+```bash
+npm run typecheck     # tsc --noEmit
+npm run build         # dry-run 产物到 dist/
+```
 
 ---
 
 ## 三、搭建环境介绍
 
-### 3.1 环境与工具要求
+### 3.1 环境要求
 
-| 项 | 要求 | 说明 |
-|---|---|---|
-| Node.js | 20+（推荐 22 LTS） | Wrangler 4.x 运行环境 |
-| npm | 随 Node 附带 | 安装依赖 |
-| Python | 3.8+ | 仅用于 `setup_remote.py` 与 `smoke_test.py`，均为标准库、无需 pip 安装 |
-| Git | 任意近期版本 | 克隆仓库 |
-| Cloudflare 账号 | **免费计划即可，无需绑卡** | 需先完成 `wrangler login` |
-| Wrangler | 由 `npx wrangler` 提供 | 已列为 devDependency，无需全局安装 |
-| 外部图床（可选） | 兼容 CloudFlare-ImgBed API | 不配置则除图片上传外功能全部可用 |
+| 项 | 要求 |
+|---|---|
+| Node.js | 20+（推荐 22 LTS） |
+| Python | 3.8+（仅辅助脚本与冒烟测试，纯标准库） |
+| Cloudflare 账号 | **免费计划即可，无需绑卡** |
+| Wrangler | devDependency 自带，`npx wrangler` |
+| workers.dev 子域 | 需在控制台预先注册一次（OAuth 登录态无法用 API 创建） |
 
-> **workers.dev 子域名**：账号需在 Cloudflare 控制台预先注册一个 `*.workers.dev` 子域名。OAuth 登录态无法用 API 创建子域名（会返回 `10405 Method not allowed for this authentication scheme`），首次请在控制台点一次即可，之后 `wrangler deploy` 会直接使用。
-
-### 3.2 本地开发（从零到可访问）
+### 3.2 本地开发
 
 ```bash
-git clone <your-private-repo-url> gexiong_cms
-cd gexiong_cms
-
-# 1) 配置：模板已提交，真实配置不进仓库
-cp wrangler.example.jsonc wrangler.jsonc
-#    编辑 wrangler.jsonc 填入 account_id / D1 database_id / KV id / SITE_URL / 图床地址
-#    或者直接跑 `python scripts/setup_remote.py` 让它自动创建资源并写回 ID
-
-# 2) 安装依赖
+git clone <repo> abncms && cd abncms
+cp wrangler.example.jsonc wrangler.jsonc   # 填 account_id / D1 / KV ID
+cp .dev.vars.example .dev.vars             # 设置初始管理员密码
 npm install
-
-# 3) 本地数据库（Wrangler 会在 .wrangler/ 下建本地 SQLite）
 npm run db:local
 npx wrangler d1 execute cf-press-db --local --file=./seed.sql
-
-# 4) 本地变量：复制模板并设置初始管理员密码
-cp .dev.vars.example .dev.vars
-#    编辑 .dev.vars 里的 ADMIN_PASSWORD
-
-# 5) 启动
-npm run dev            # http://127.0.0.1:8787
-```
-
-本地验收：
-
-```bash
+npm run dev                                # http://127.0.0.1:8787
 npm run typecheck
 SMOKE_ADMIN_USER=admin SMOKE_ADMIN_PASS='你的密码' \
   python scripts/smoke_test.py http://127.0.0.1:8787
 ```
 
-首次登录时若 `users` 表为空，系统会用 `ADMIN_PASSWORD` 自动创建 `admin` 账号；**登录后请立刻在「设置 → 修改密码」改掉**。
-
-### 3.3 部署到 Cloudflare（生产）
+### 3.3 部署
 
 ```bash
 npx wrangler login
+python scripts/setup_remote.py             # 自动建 D1 / KV / Vectorize 并写回 ID
+npm run db:remote                          # 全新库：直接建表
+npm run db:seed                            # 可选
 
-# 1) 创建远程资源（二选一）
-#    A. 自动：读 wrangler.jsonc，创建 D1 / KV / Vectorize 并把 ID 写回
-python scripts/setup_remote.py
+# 从旧版 cf-press 升级（线上已有数据）时不要重跑 schema.sql 覆盖后台设置，
+# 改用增量迁移：只补齐缺失 key，绝不覆盖已修改过的站名 / 密码 / Token。
+python scripts/migrate.py                  # 或 npm run db:migrate
 
-#    B. 手动：
-npx wrangler d1 create cf-press-db
-npx wrangler kv namespace create cf-press-cache
-npx wrangler vectorize create cf-press-posts --dimensions=1024 --metric=cosine
-#       把返回的 ID 分别填进 wrangler.jsonc 的 database_id / id
-
-# 2) 初始化数据库
-npm run db:remote
-npm run db:seed                # 演示文章，正式站点可跳过
-
-# 3) 注入密钥（不会写进任何文件）
 npx wrangler secret put ADMIN_PASSWORD
-npx wrangler secret put IMGBED_TOKEN      # 外部图床 API Token，可选
+npx wrangler secret put CONFIG_ENCRYPTION_KEY   # 32 字节随机串，后台改 Token 用
+npx wrangler secret put IMGBED_TOKEN            # 可选：环境变量模式下的图床 Token
 
-# 4) 部署
 npm run deploy
 ```
 
-部署成功后把 `wrangler.jsonc` 的 `SITE_URL` 改成返回的 `https://<name>.<subdomain>.workers.dev`（或自定义域名），再 `npm run deploy` 一次，Sitemap / RSS / 结构化数据里的绝对链接才会正确。
+部署后把 `wrangler.jsonc` 的 `SITE_URL` 改成真实地址，再 `npm run deploy` 一次。
 
-### 3.4 环境变量与 Secrets 对照
+### 3.4 环境变量与 Secrets
 
 | 名称 | 位置 | 作用 |
 |---|---|---|
-| `account_id` / `database_id` / `kv id` | `wrangler.jsonc` | 绑定 Cloudflare 资源（不提交仓库） |
-| `SITE_NAME` / `SITE_DESCRIPTION` / `SITE_URL` | `vars` | 站点基础信息，也可在后台设置里改 |
-| `TURNSTILE_SITE_KEY` | `vars` | 前端 widget 的 Site Key |
-| `AI_*` / `ENABLE_AI` / `ENABLE_VECTORIZE` | `vars` | AI 模型与开关 |
-| `IMGBED_BASE_URL` / `IMGBED_TOKEN_NAME` | `vars` | 外部图床地址与 Token 名称（展示用） |
-| `ADMIN_PASSWORD` | **Secret** | 仅首次初始化管理员时用 |
-| `IMGBED_TOKEN` | **Secret** | 图床 API Token，Worker 服务端注入，绝不下发浏览器 |
-| `turnstile_secret` | D1 `settings` 表 | 后台「设置」页维护的 Turnstile Secret |
+| `account_id` / `database_id` / `kv id` | `wrangler.jsonc`（不入库） | 资源绑定 |
+| `SITE_NAME` / `SITE_DESCRIPTION` / `SITE_URL` | `vars` | 站点信息，后台可改 |
+| `TURNSTILE_SITE_KEY` | `vars` | 与后台 Secret **成对替换** |
+| `IMGBED_BASE_URL` / `IMGBED_TOKEN_NAME` | `vars` | 环境变量模式的图床配置 |
+| `ADMIN_PASSWORD` | Secret | 仅首次初始化管理员 |
+| `CONFIG_ENCRYPTION_KEY` | Secret | 加密后台写入的 Token |
+| `IMGBED_TOKEN` | Secret | 环境变量模式的图床 Token |
+| `site_logo` / `imgbed_*` | D1 `settings` | 后台维护（Token 为密文） |
 
-外部图床接口约定：`POST /upload`，`Authorization: Bearer <TOKEN>`，FormData 字段 `file`，支持 `returnFormat=full`、`responseFormat=object` 与 `uploadChannel=s3|huggingface`；删除为 `POST /api/manage/delete/{fileId}`。
+图床接口约定：`POST /upload`，`Authorization: Bearer <TOKEN>`，字段 `file`，支持 `returnFormat=full`、`responseFormat=object`、`uploadChannel=s3|huggingface`；删除 `POST /api/manage/delete/{fileId}`。
 
-### 3.5 常见问题
+### 3.5 排错速查
 
-| 现象 | 原因与处理 |
+| 现象 | 处理 |
 |---|---|
-| Turnstile 显示「成功」但提示「人机验证未通过」 | Site Key 与 Secret **必须成对替换**。模板里两边都是官方测试密钥（始终通过）；只填一侧真实密钥就会错配。代码已做防锁死：任一侧为测试密钥即放行 |
-| 站名回退成默认值 | `settings` 表缺键或 D1 查询异常时会用代码默认值。检查后台「设置」并保存一次，必要时重跑 `schema.sql` |
-| 后台上传报「图床未配置」 | 未设置 `IMGBED_TOKEN` Secret，或 `IMGBED_BASE_URL` 为空。补齐后重新 `npm run deploy` |
-| 登录报 500 / 超时 | 免费计划单次请求 CPU 10ms；PBKDF2 迭代数在 `src/lib/auth.ts`，如确需调整请同步重新生成密码哈希 |
-| 子域名注册失败 `10405` | OAuth 登录态不支持该 API，去 Cloudflare 控制台手动注册一次 `*.workers.dev` 子域 |
-| AI 摘要/语义搜索不生效 | 免费额度耗尽或 Vectorize 索引未创建；功能会降级，不影响发文 |
+| Turnstile 显示成功却提示未通过 | Site Key 与 Secret 必须成对替换；任一侧是测试密钥时代码会放行 |
+| 后台改不了图床 Token | 未配置 `CONFIG_ENCRYPTION_KEY`，当前是「仅环境变量模式」 |
+| 图片上传报「图床未配置」 | 后台「设置 → 图床接入」填地址与 Token，或设置 `IMGBED_TOKEN` Secret |
+| 站名回退成默认值 | `settings` 缺键或 D1 异常时回落；进后台保存一次即可 |
+| 改了站名 / LOGO / 设置，前台没立刻变 | CDN 按 TTL 过期；编辑器点「查看（绕过缓存）」，或绑定自定义域名后在控制台清缓存 |
+| 阅读量不动或跳得快 | 统计是 25% 采样 ×4 聚合的估算值；后台「开启访问统计」可关闭 |
+| 升级后后台缺 LOGO / 图床设置 | 旧库需跑 `python scripts/migrate.py` 补齐设置项 |
+| 子域注册失败 `10405` | 去 Cloudflare 控制台手动注册一次 `*.workers.dev` 子域 |
 
-### 3.6 安全说明
+### 3.6 安全
 
-- 密码 PBKDF2-SHA256 加盐哈希（5000 次迭代），会话 Cookie `HttpOnly` + `SameSite=Lax` + HTTPS 下 `Secure`，有效期 7 天
-- 后台所有写操作校验登录态与同源 Origin；登录有同 IP 失败限流
-- Markdown 输出全部转义，防 XSS；SQL 一律参数化绑定
-- 图床 Token 只存 Cloudflare Secret，前端源码与页面 HTML 中都不会出现
-- `wrangler.jsonc`、`.dev.vars`、`_*.sql` 等临时诊断文件均在 `.gitignore` 中，**推送前请再确认一次**
-- 默认 Turnstile 为官方测试密钥，正式对外前请成对换成真实密钥并加强口令
+- 密码 PBKDF2-SHA256 加盐哈希；会话 Cookie `HttpOnly` + `SameSite=Lax` + HTTPS 下 `Secure`，7 天
+- 后台写操作校验登录态与同源 Origin；登录有同 IP 失败限流
+- Markdown 输出全转义、SQL 全参数化绑定
+- 图床 Token：AES-GCM 加密落库、页面掩码、不进日志、导出备份时排除
+- `/api/hit` 校验同源 Origin、站内路径白名单与权重上限；统计为采样估算、可被伪造，不作为业务 / 计费依据
+- `wrangler.jsonc`、`.dev.vars` 与临时诊断文件均在 `.gitignore`
 
 ---
 
-## 仓库状态
+## 路线图
 
-- 私有仓库 `gexiong_cms`，仅用于版本管理与持续迭代
-- 后续待办：热门文章迁移、图片上传生产验收、可选启用真实 Turnstile
-- 若将来转公开，请先全文复查配置、账号 ID 与任何示例凭证
+| 版本 | 内容 |
+|---|---|
+| **v0.2** | 图床/LOGO 后台化、品牌中性化、CDN 缓存与写入聚合、迁移框架 |
+| v0.3 | 独立页面、导航菜单、定时发布、URL 规则、导入导出备份 |
+| v0.4 | 声明式主题引擎、切换与预览、默认主题 Aurora |
+| v0.5 | 白名单 Hook、静态索引商店、一键安装 |
+| v0.9 → v1.0 | 开源清理、CI、文档站、Demo 站、正式转公开 |
+
+完整论证（差异化、免费额度预算、主题/商店设计、数据模型、风险）见 [ABNcms-PLAN.md](./ABNcms-PLAN.md)。
+
+## 许可证
+
+[MIT](./LICENSE) · 名称与 Logo 的使用见 [TRADEMARK.md](./TRADEMARK.md)。

@@ -1,4 +1,4 @@
-/* cf-press 后台交互脚本（原生 ES Module，无需打包） */
+/* ABNcms 后台交互脚本（原生 ES Module，无需打包） */
 
 const $ = (s) => document.querySelector(s)
 
@@ -64,7 +64,7 @@ $('#btn-ai')?.addEventListener('click', async () => {
   }
 })
 
-/* ── 图片上传（代理到 ABN图床，Token 由服务端注入） ── */
+/* ── 图片上传（Worker 代理到外部图床，Token 由服务端注入） ── */
 async function upload(file) {
   const fd = new FormData()
   fd.append('file', file)
@@ -138,5 +138,80 @@ document.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 's' && $('#postform')) {
     e.preventDefault()
     $('#postform').requestSubmit()
+  }
+})
+
+/* ══════════════════════════════════════════════════════════════════════════
+   设置页：站点 LOGO 上传 / 清除 / 预览，图床连通性测试
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const logoField = $('#site_logo')
+const logoBox = $('#logo-preview')
+
+/** 用 DOM API 构造 <img>，避免把用户粘贴的外链拼进 HTML 造成注入 */
+function setLogoPreview(url) {
+  if (!logoBox) return
+  logoBox.replaceChildren()
+  if (!url) {
+    const sp = document.createElement('span')
+    sp.className = 'small faint'
+    sp.textContent = '未上传'
+    logoBox.appendChild(sp)
+    return
+  }
+  const h = Math.min(120, Math.max(24, Number($('[name="site_logo_height"]')?.value) || 36))
+  const img = document.createElement('img')
+  img.src = url
+  img.alt = 'LOGO'
+  img.style.cssText = `max-height:${h}px;max-width:200px;object-fit:contain`
+  logoBox.appendChild(img)
+}
+
+$('#btn-logo-upload')?.addEventListener('click', () => $('#logo-file')?.click())
+
+$('#logo-file')?.addEventListener('change', async (e) => {
+  const f = e.target.files?.[0]
+  if (!f) return
+  toast('正在上传 LOGO…')
+  try {
+    const j = await upload(f)
+    if (j.error) return toast(j.error, false)
+    if (logoField) logoField.value = j.url
+    setLogoPreview(j.url)
+    toast('LOGO 已上传，请点「保存设置」生效')
+  } catch (err) {
+    toast('上传失败：' + err.message, false)
+  }
+  e.target.value = ''
+})
+
+$('#btn-logo-clear')?.addEventListener('click', () => {
+  if (logoField) logoField.value = ''
+  setLogoPreview('')
+  toast('已清除，请点「保存设置」生效')
+})
+
+$('#btn-imgbed-test')?.addEventListener('click', async () => {
+  const out = $('#imgbed-test-result')
+  const btn = $('#btn-imgbed-test')
+  if (!out || !btn) return
+  btn.disabled = true
+  btn.textContent = '测试中…'
+  out.style.color = 'var(--muted)'
+  out.textContent = '正在连接图床…'
+  const fd = new FormData()
+  fd.append('imgbed_base_url', $('#imgbed_base_url')?.value || '')
+  fd.append('imgbed_token', $('#imgbed_token')?.value || '')
+  try {
+    const r = await fetch('/admin/imgbed/test', { method: 'POST', body: fd })
+    const j = await r.json()
+    out.textContent = (j.ok ? '✓ ' : '✗ ') + (j.message || '无响应')
+    out.style.color = j.ok ? 'var(--ok)' : 'var(--danger)'
+  } catch (err) {
+    out.textContent = '✗ 请求失败：' + err.message
+    out.style.color = 'var(--danger)'
+  } finally {
+    btn.disabled = false
+    btn.textContent = '测试连接'
   }
 })

@@ -198,7 +198,7 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
   <div class="row">
     <label class="row small" style="gap:7px"><input type="checkbox" name="pinned" value="1" ${p?.pinned ? 'checked' : ''}> 置顶</label>
     <span class="grow"></span>
-    ${!isNew ? `<a class="btn" href="/p/${esc(p!.slug)}" target="_blank">查看</a>` : ''}
+    ${!isNew ? `<a class="btn" href="/p/${esc(p!.slug)}?t=${Date.now()}" target="_blank" title="带随机参数绕过 CDN 缓存，立即查看最新内容">查看（绕过缓存）</a>` : ''}
     <button class="btn primary" type="submit">${isNew ? '发布' : '保存修改'}</button>
   </div>
 </form>
@@ -304,6 +304,7 @@ export function mediaPage(o: {
     base: string
     tokenName: string
     channels: { value: string; label: string }[]
+    source?: string
   }
   msg?: string
   err?: string
@@ -317,7 +318,7 @@ export function mediaPage(o: {
   const statusLine = im
     ? im.configured
       ? `<div class="small faint" style="margin-top:10px">图床：<a href="${esc(im.base)}" target="_blank" rel="noopener">${esc(im.base)}</a> · Token「${esc(im.tokenName)}」已配置 · 服务端代理上传（Token 不下发浏览器）</div>`
-      : `<div class="alert err" style="margin:12px 0 0">图床未配置：请在 Cloudflare 执行 <code>wrangler secret put IMGBED_TOKEN</code> 后重新部署。</div>`
+      : `<div class="alert err" style="margin:12px 0 0">图床未配置：请到 <a href="/admin/settings">设置 → 图床接入</a> 填写 API 地址与 Token（也可用环境变量 / Secret 兜底）。</div>`
     : ''
   const body = `
 ${pageHead('媒体库')}
@@ -371,7 +372,16 @@ export function settingsPage(o: {
     turnstileSiteKey: string
     aiOn: string
     vecOn: string
-    imgbed?: { configured: boolean; base: string; tokenName: string }
+    imgbed?: {
+      configured: boolean
+      base: string
+      tokenName: string
+      tokenHint: string
+      source: 'database' | 'env' | 'none'
+      canEditToken: boolean
+      channel: string
+      channels: { value: string; label: string }[]
+    }
   }
   msg?: string
   err?: string
@@ -396,6 +406,47 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
         <option value="0" ${s.allow_comments !== '1' ? 'selected' : ''}>关闭</option>
       </select></div>
   </div>
+  <div class="field"><label class="row small" style="gap:7px;font-weight:500"><input type="checkbox" name="analytics_enabled" value="1" ${s.analytics_enabled !== '0' ? 'checked' : ''}> 开启访问统计（前端异步打点）</label>
+    <div class="small faint" style="margin-top:5px;line-height:1.7">关闭后前台页面完全由 CDN 边缘缓存供给，命中时 Worker 不执行、<b>D1 / KV / Workers 消耗为 0</b>；开启后仅有轻量打点请求，阅读量为采样估算值。改动在 CDN 缓存过期后对所有访客生效。</div></div>
+  <div class="small muted" style="font-weight:600;margin:22px 0 12px;border-top:1px solid var(--border);padding-top:18px">站点 LOGO</div>
+  <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+    <div id="logo-preview" style="min-width:160px;height:60px;display:flex;align-items:center;justify-content:center;background:var(--bg-2,#f6f7f9);border:1px dashed var(--border);border-radius:8px;padding:8px">
+      ${s.site_logo ? `<img src="${esc(s.site_logo)}" alt="LOGO" style="max-height:${esc(s.site_logo_height)}px;max-width:200px;object-fit:contain">` : '<span class="small faint">未上传</span>'}
+    </div>
+    <div style="flex:1;min-width:240px">
+      <div class="field"><label>LOGO 地址（也可粘贴外链）</label><input class="input" id="site_logo" name="site_logo" value="${esc(s.site_logo)}" placeholder="https://your-image-host.example.com/file/logo.svg"></div>
+      <div class="row" style="gap:8px;margin-top:8px">
+        <button class="btn" type="button" id="btn-logo-upload">上传 LOGO</button>
+        <button class="btn" type="button" id="btn-logo-clear">清除</button>
+        <input type="file" id="logo-file" accept="image/*" hidden>
+      </div>
+      <div class="small faint" style="margin-top:8px;line-height:1.7">推荐：显示高 <b>32–40px</b>，源文件 <b>2x（64–80px）</b>，宽 ≤ 200px 横版，<b>SVG 优先</b>（&lt;20KB），位图 PNG/WebP 透明底 &lt;100KB，四周留 8px 安全区。尺寸不符只影响观感，不会阻止上传。</div>
+    </div>
+  </div>
+  <div class="field" style="margin-top:12px"><label>LOGO 显示高度（px，24–120）</label><input class="input" name="site_logo_height" type="number" min="24" max="120" value="${esc(s.site_logo_height)}"></div>
+
+  <div class="small muted" style="font-weight:600;margin:22px 0 12px;border-top:1px solid var(--border);padding-top:18px">图床接入</div>
+  <div class="small faint" style="margin-bottom:12px">状态：${im && im.configured ? '<span style="color:var(--ok)">● 已启用</span>' : '<span style="color:var(--danger)">● 未配置</span>'} · Token 来源：${im && im.source === 'database' ? '后台配置（加密存储）' : im && im.source === 'env' ? '环境变量 / Secret' : '无'}${im && im.tokenHint ? ` · 当前 Token <code>${esc(im.tokenHint)}</code>` : ''}</div>
+  <div class="field"><label>图床 API 地址</label><input class="input" id="imgbed_base_url" name="imgbed_base_url" value="${esc(s.imgbed_base_url || (im ? im.base : ''))}" placeholder="https://your-image-host.example.com"></div>
+  <div class="grid2">
+    <div class="field"><label>API Token（留空表示不修改）</label><input class="input" id="imgbed_token" name="imgbed_token" type="password" autocomplete="new-password" placeholder="${im && im.canEditToken ? '填写新 Token 以替换' : '需先配置 CONFIG_ENCRYPTION_KEY'}" ${im && !im.canEditToken ? 'disabled' : ''}></div>
+    <div class="field"><label>Token 名称（仅备注）</label><input class="input" name="imgbed_token_name" value="${esc(s.imgbed_token_name || (im ? im.tokenName : ''))}" placeholder="例如 default"></div>
+  </div>
+  <div class="grid2">
+    <div class="field"><label>默认上传渠道</label>
+      <select class="input" name="imgbed_channel">
+        ${(im?.channels || [{ value: '', label: '默认渠道' }]).map((ch) => `<option value="${esc(ch.value)}" ${(s.imgbed_channel || '') === ch.value ? 'selected' : ''}>${esc(ch.label)}</option>`).join('')}
+      </select></div>
+    <div class="field"><label>回退到环境变量</label>
+      <label class="row small" style="gap:7px;margin-top:10px"><input type="checkbox" name="imgbed_clear" value="1"> 清除后台 Token</label>
+    </div>
+  </div>
+  <div class="row" style="gap:8px;margin-top:4px">
+    <button class="btn" type="button" id="btn-imgbed-test">测试连接</button>
+    <span id="imgbed-test-result" class="small faint"></span>
+  </div>
+  <div class="small faint" style="margin-top:10px;line-height:1.7">Token 经 <b>AES-GCM 加密</b>存入 D1，主密钥 <code>CONFIG_ENCRYPTION_KEY</code> 只放 Cloudflare Secret，页面永不回显明文。未配主密钥时为「仅环境变量模式」，可改地址但不能写入 Token。兼容 CloudFlare-ImgBed 风格 API：POST /upload + Bearer Token。</div>
+
   <div class="field"><label>Turnstile Secret Key</label>
     <input class="input" name="turnstile_secret" value="${esc(s.turnstile_secret)}">
     <div class="small faint" style="margin-top:5px">当前使用 Cloudflare 官方测试密钥（始终通过）。启用真实人机验证需 <b>Site Key 与 Secret 成对替换</b>：Site Key 在 <code>wrangler.jsonc</code> 的 <code>TURNSTILE_SITE_KEY</code> 变量里，改完需重新部署；只填一侧会错配。</div>
@@ -418,18 +469,12 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
     <div>站点地址：${esc(o.envInfo.siteUrl)}</div>
     <div>Turnstile Site Key：${esc(o.envInfo.turnstileSiteKey)}</div>
     <div>Workers AI：${esc(o.envInfo.aiOn)} · Vectorize：${esc(o.envInfo.vecOn)}</div>
-    <div>图片存储：${im ? (im.configured ? `ABN图床 <a href="${esc(im.base)}" target="_blank" rel="noopener">${esc(im.base)}</a>（Token「${esc(im.tokenName)}」· Backblaze B2 / HuggingFace）` : '图床未配置（缺 IMGBED_TOKEN）') : '—'}</div>
-    <div>运行时：Cloudflare Workers · 数据库 D1 · 缓存 KV · 图床代理上传</div>
+    <div>图片存储：${im ? (im.configured ? `外部图床 <a href="${esc(im.base)}" target="_blank" rel="noopener">${esc(im.base)}</a>（${im.source === 'database' ? '后台配置' : '环境变量'}）` : '图床未配置') : '—'}</div>
+    <div>运行时：Cloudflare Workers · D1 · KV · 图床代理上传</div>
+    <div>页面缓存：匿名前台 <code>s-maxage</code> + <code>stale-while-revalidate</code> 边缘缓存；登录态 / 后台 / 搜索不缓存</div>
+    <div>访问统计：${s.analytics_enabled !== '0' ? '开启（25% 采样打点，权重 ×4）' : '关闭（零写入，纯静态供给）'}</div>
   </div>
 </div>
-${im ? `<div class="card pad" style="margin-top:16px">
-  <div class="small muted" style="font-weight:600;margin-bottom:10px">图床接入（ABN图床 / CloudFlare-ImgBed）</div>
-  <div class="small faint" style="line-height:2">
-    <div>API 地址：${esc(im.base)}/upload</div>
-    <div>认证方式：服务端注入 <code>Authorization: Bearer ***</code>（Token 存于 Cloudflare Secret，不出现在页面源码）</div>
-    <div>可选渠道：默认 / Backblaze B2（S3）/ HuggingFace</div>
-    <div>状态：${im.configured ? '<span style="color:var(--ok)">● 已启用</span>' : '<span style="color:var(--danger)">● 未配置</span>'} · 在「媒体库」或编辑器点「插入图片」即可上传</div>
-  </div>
-</div>` : ''}`
+<script type="module" src="/admin.js"></script>`
   return adminPage({ title: '设置', body, active: '/admin/settings', user: o.user, settings: o.settings })
 }

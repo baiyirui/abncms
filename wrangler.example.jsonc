@@ -7,7 +7,7 @@
   // 也可以直接跑 `python scripts/setup_remote.py`，脚本会自动创建远程资源
   // 并把返回的 ID 写回 wrangler.jsonc。
   // ─────────────────────────────────────────────────────────────────────────
-  "name": "gexiong-cms",
+  "name": "abncms",
   "account_id": "REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID",
   "main": "src/index.ts",
   "compatibility_date": "2025-11-11",
@@ -53,8 +53,8 @@
   // 若历史数据里仍有 R2 key，可额外添加 r2_buckets，/media/* 会自动读取。
 
   "vars": {
-    "SITE_NAME": "格熊",
-    "SITE_DESCRIPTION": "免费商用资源 · 字体 · AI 工具 · 数码技巧 · 生活妙招",
+    "SITE_NAME": "ABNcms",
+    "SITE_DESCRIPTION": "A lightweight CMS on the Cloudflare free tier",
     "SITE_URL": "https://your-worker.your-subdomain.workers.dev",
     // Cloudflare 官方测试密钥（始终通过）。启用真实验证时必须把 Site Key
     // 与后台设置页的 Turnstile Secret 成对替换为同一 widget 的真实密钥。
@@ -64,7 +64,10 @@
     "AI_EMBED_DIMS": "1024",
     "ENABLE_AI": "true",
     "ENABLE_VECTORIZE": "true",
-    // 外部图床地址与 Token 名称；真正的 Token 用 `wrangler secret put IMGBED_TOKEN`
+    // 图床也可在「后台 → 设置 → 图床接入」里配置，优先级高于这里的变量。
+    // 后台写入的 Token 会经 AES-GCM 加密存 D1，需要主密钥 Secret：
+    //   npx wrangler secret put CONFIG_ENCRYPTION_KEY
+    // 这是 Secret，不要写进 vars / 不要提交；未配置时后台为「仅环境变量模式」。
     "IMGBED_BASE_URL": "https://your-image-host.example.com",
     "IMGBED_TOKEN_NAME": "your-token-name"
   },

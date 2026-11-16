@@ -1,9 +1,10 @@
 {
-  "name": "gexiong_cms",
-  "version": "1.0.0",
+  "name": "abncms",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "格熊 CMS：基于 Cloudflare Workers + D1 + KV + Workers AI + Vectorize 的 Serverless 内容发布系统，图片走外部图床代理",
+  "description": "ABNcms — a lightweight open-source CMS for Cloudflare Workers + D1 + external image host, designed to run entirely on the free tier",
+  "license": "MIT",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
@@ -14,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "db:local": "wrangler d1 execute cf-press-db --local --file=./schema.sql",
     "db:remote": "wrangler d1 execute cf-press-db --remote --file=./schema.sql",
-    "db:seed": "wrangler d1 execute cf-press-db --remote --file=./seed.sql"
+    "db:seed": "wrangler d1 execute cf-press-db --remote --file=./seed.sql",
+    "db:migrate": "python scripts/migrate.py"
   },
   "dependencies": {
     "hono": "^4.6.14"

@@ -8,8 +8,10 @@ import {
   imgbedConfig,
   imgbedUpload,
   imgbedDelete,
+  imgbedTest,
   IMGBED_CHANNELS
 } from './lib/imgbed'
+import { sealSecret, tokenHint, configCryptoReady } from './lib/crypto'
 import {
   esc,
   slugify,
@@ -30,7 +32,11 @@ const app = new Hono<{ Bindings: Env }>()
 app.use('*', async (c, next) => {
   const env = c.env
   ;(c as any).set('settings', await db.getSettings(env))
-  ;(c as any).set('user', await auth.readSession(env, c.req.header('cookie') || null))
+  // 匿名请求不查会话 KV：免费额度里 KV 读虽宽裕，但 CDN 未命中时
+  // 这一笔读完全没必要，跳过可让「静态供给」路径只依赖一次设置读。
+  const cookie = c.req.header('cookie') || ''
+  const user = /(?:^|;\s*)sid=/.test(cookie) ? await auth.readSession(env, cookie) : null
+  ;(c as any).set('user', user)
   await next()
 })
 
@@ -54,10 +60,25 @@ function sameOrigin(c: any): boolean {
   }
 }
 
+/**
+ * 匿名前台页面交给 Cloudflare CDN 边缘缓存：缓存命中时请求根本不进 Worker，
+ * 因此 Workers / D1 / KV 消耗都是 0 —— 这就是「发布后近似静态」的实现。
+ *
+ * - stale-while-revalidate：过期后先回旧内容再后台刷新，避免回源尖峰。
+ * - 登录态一律 private,no-store：防止会话串号，也防止草稿被缓存后泄露。
+ * - 后台 / 搜索 / 错误页传 0，同样不缓存。
+ * 注意：免费版 workers.dev 无法主动 purge CDN，内容更新靠 s-maxage 自然过期；
+ * 后台编辑器的「查看（绕过缓存）」用 ?t= 参数强制回源。绑定自定义域名后
+ * 可在 Cloudflare 控制台手动清除缓存。
+ */
 function html(c: any, body: string, cacheSeconds = 0) {
   const h: Record<string, string> = { 'content-type': 'text/html; charset=utf-8' }
-  if (cacheSeconds > 0) h['cache-control'] = `public, max-age=0, s-maxage=${cacheSeconds}`
-  else h['cache-control'] = 'no-store'
+  if (cacheSeconds > 0 && !U(c)) {
+    const swr = Math.min(86400, cacheSeconds * 24)
+    h['cache-control'] = `public, max-age=0, s-maxage=${cacheSeconds}, stale-while-revalidate=${swr}`
+  } else {
+    h['cache-control'] = 'private, no-store'
+  }
   return c.body(body, { headers: h })
 }
 
@@ -77,7 +98,8 @@ async function side(env: Env): Promise<import('./views/front').SideData> {
     cats: (cats || []).map((c: any) => ({ name: c.name, slug: c.slug, post_count: c.post_count })),
     tags: (tags || []).slice(0, 18).map((t: any) => ({ name: t.name, slug: t.slug, post_count: t.post_count }))
   }
-  await env.KV.put('side:v1', JSON.stringify(data), { expirationTtl: 300 })
+  // 侧栏低频写：TTL 30 分钟，避免 KV 免费额度 1,000 写/天被高频回源打满
+  await env.KV.put('side:v1', JSON.stringify(data), { expirationTtl: 1800 })
   return data
 }
 
@@ -91,21 +113,14 @@ app.get('/', async (c) => {
   const perPage = Math.min(50, Math.max(1, Number(s.posts_per_page) || 10))
   const { page, offset } = paginate(c.req.query(), perPage)
 
-  const cacheKey = `page:home:${page}:${perPage}`
-  if (page === 1) {
-    const hit = await env.KV.get(cacheKey)
-    if (hit) return html(c, hit, 60)
-  }
-
+  // 不再写 KV 页面缓存：CDN 命中时 Worker 不执行；未命中时回源 D1，
+  // D1 读额度（500 万行/天）远比 KV 写额度（1,000 次/天）宽裕。
   const [posts, total] = await Promise.all([
     db.listPosts(env, { status: 'published', limit: perPage, offset }),
     db.countPosts(env, { status: 'published' })
   ])
   const body = V.home({ posts, cur: page, total, perPage, settings: s, side: await side(env) })
-
-  if (page === 1) await env.KV.put(cacheKey, body, { expirationTtl: 60 })
-  c.executionCtx.waitUntil(db.recordView(env, '/', null, c.req.raw.headers))
-  return html(c, body, 60)
+  return html(c, body, 120)
 })
 
 app.get('/archive', async (c) => {
@@ -192,14 +207,6 @@ app.get('/p/:slug', async (c) => {
   const env = c.env
   const s = S(c)
   const slug = c.req.param('slug')
-  const cacheKey = `page:post:${slug}`
-  const cached = await env.KV.get(cacheKey)
-  if (cached) {
-    const p0 = await db.getPostBySlug(env, slug).catch(() => null)
-    if (p0) c.executionCtx.waitUntil(db.bumpViews(env, p0.id))
-    return html(c, cached, 120)
-  }
-
   const p = await db.getPostBySlug(env, slug)
   if (!p) return html(c, V.notFound(s, await side(env), '文章不存在'))
   // 草稿仅登录用户可见
@@ -238,14 +245,8 @@ app.get('/p/:slug', async (c) => {
     side: await side(env)
   })
 
-  if (p.status === 'published') await env.KV.put(cacheKey, body, { expirationTtl: 120 })
-  c.executionCtx.waitUntil(
-    (async () => {
-      await db.bumpViews(env, p.id)
-      await db.recordView(env, '/p/' + slug, p.id, c.req.raw.headers)
-    })()
-  )
-  return html(c, body, 120)
+  // 浏览量改由前端 beacon 打到 /api/hit，渲染路径零写入
+  return html(c, body, p.status === 'published' ? 600 : 0)
 })
 
 // ── 评论提交 ──
@@ -272,8 +273,9 @@ app.post('/comment', async (c) => {
     content: content.slice(0, 1000),
     status: 'approved'
   })
-  await env.KV.delete(`page:post:${post.slug}`)
-  return c.redirect('/p/' + post.slug + '#comments')
+  // 免费版无法主动 purge CDN：提交者用 ?t= 强制回源立即看到新评论，
+  // 其他访客在 s-maxage 过期后看到，避免为一条评论付一次全站失效代价。
+  return c.redirect('/p/' + post.slug + '?t=' + Date.now() + '#comments')
 })
 
 // ── RSS ──
@@ -301,7 +303,7 @@ app.get('/feed.xml', async (c) => {
   <language>zh-CN</language>
   ${items}
 </channel></rss>`
-  return c.body(xml, { headers: { 'content-type': 'application/rss+xml; charset=utf-8', 'cache-control': 'public, max-age=600' } })
+  return c.body(xml, { headers: { 'content-type': 'application/rss+xml; charset=utf-8', 'cache-control': 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400' } })
 })
 
 // ── Sitemap ──
@@ -324,7 +326,7 @@ app.get('/sitemap.xml', async (c) => {
   ${tags.map((x) => url('/t/' + x.slug, '0.4')).join('\n  ')}
   ${posts.map((p) => url('/p/' + p.slug, '0.8')).join('\n  ')}
 </urlset>`
-  return c.body(xml, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } })
+  return c.body(xml, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=600, s-maxage=21600, stale-while-revalidate=86400' } })
 })
 
 // ── R2 媒体文件（兼容历史 R2 记录；新上传走图床外链） ──
@@ -425,6 +427,7 @@ app.get('/admin', guard, async (c) => {
     db.dashboardStats(env),
     db.listPosts(env, { limit: 8, offset: 0 })
   ])
+  const img = await imgbedConfig(env, S(c))
   return c.html(
     A.dashboard({
       stats,
@@ -433,13 +436,14 @@ app.get('/admin', guard, async (c) => {
       user: U(c)!,
       services: [
         { name: 'D1', ok: true, note: '文章/用户/评论' },
-        { name: 'KV', ok: true, note: '会话与页面缓存' },
+        { name: 'KV', ok: true, note: '会话 / 设置 / 侧栏缓存' },
+        { name: 'CDN 页面缓存', ok: true, note: '匿名前台 s-maxage + SWR' },
         {
           name: '图床',
-          ok: imgbedConfig(env).configured,
-          note: imgbedConfig(env).configured
-            ? imgbedConfig(env).base.replace(/^https?:\/\//, '') + ' · B2/HF'
-            : '未配置 IMGBED_TOKEN'
+          ok: img.configured,
+          note: img.configured
+            ? img.base.replace(/^https?:\/\//, '') + ' · ' + (img.source === 'database' ? '后台配置' : '环境变量')
+            : '未配置地址或 Token'
         },
         { name: 'Workers AI', ok: env.ENABLE_AI !== 'false' && !!env.AI, note: env.AI_SUMMARY_MODEL || 'llama-3.2-3b' },
         { name: 'Vectorize', ok: env.ENABLE_VECTORIZE !== 'false' && !!env.VECTORIZE, note: '语义搜索' },
@@ -537,15 +541,8 @@ const savePost = async (c: any, id: number | null) => {
     c.executionCtx.waitUntil(indexPost(env, postId!, title, md))
   }
 
-  // 清缓存
-  c.executionCtx.waitUntil(
-    (async () => {
-      await env.KV.delete(`page:post:${slug}`)
-      await env.KV.delete('side:v1')
-      await env.KV.delete('page:home:1:10')
-      for (let i = 1; i <= 5; i++) await env.KV.delete(`page:home:${i}:10`)
-    })()
-  )
+  // 侧栏缓存立即失效；页面 HTML 由 CDN 供给，靠 s-maxage 自然过期
+  c.executionCtx.waitUntil(env.KV.delete('side:v1'))
 
   return c.redirect('/admin/posts?saved=1')
 }
@@ -563,9 +560,7 @@ app.post('/admin/post/:id/delete', guard, async (c) => {
     c.executionCtx.waitUntil(
       (async () => {
         await removeFromIndex(env, id)
-        await env.KV.delete(`page:post:${post.slug}`)
         await env.KV.delete('side:v1')
-        await env.KV.delete('page:home:1:10')
       })()
     )
   }
@@ -618,7 +613,7 @@ app.post('/admin/comment/:id/delete', guard, async (c) => {
 app.get('/admin/media', guard, async (c) => {
   const env = c.env
   const { results } = await env.DB.prepare('SELECT * FROM media ORDER BY id DESC LIMIT 100').all<any>()
-  const cfg = imgbedConfig(env)
+  const cfg = await imgbedConfig(env, S(c))
   return c.html(
     A.mediaPage({
       media: results || [],
@@ -628,6 +623,7 @@ app.get('/admin/media', guard, async (c) => {
         configured: cfg.configured,
         base: cfg.base,
         tokenName: cfg.tokenName,
+        source: cfg.source,
         channels: IMGBED_CHANNELS
       }
     })
@@ -639,7 +635,7 @@ app.post('/admin/media/:id/delete', guard, async (c) => {
   const id = Number(c.req.param('id'))
   const m = await env.DB.prepare('SELECT * FROM media WHERE id=?').bind(id).first<any>()
   if (m) {
-    const cfg = imgbedConfig(env)
+    const cfg = await imgbedConfig(env, S(c))
     const key = String(m.key || '')
     // 新记录存的是图床完整外链 → 尽力删远端；旧 R2 记录 → 删 R2 对象
     if (/^https?:\/\//.test(key)) {
@@ -657,38 +653,84 @@ app.post('/admin/media/:id/delete', guard, async (c) => {
 })
 
 // ── 设置 / 密码 ──
-app.get('/admin/settings', guard, async (c) =>
-  c.html(
+app.get('/admin/settings', guard, async (c) => {
+  const g = await imgbedConfig(c.env, S(c))
+  return c.html(
     A.settingsPage({
       settings: S(c),
       user: U(c)!,
+      err:
+        c.req.query('err') === 'nokey'
+          ? '未配置 CONFIG_ENCRYPTION_KEY，无法在后台写入 Token。请先设置主密钥 Secret，或改用环境变量模式。'
+          : undefined,
       envInfo: {
         siteUrl: c.env.SITE_URL || new URL(c.req.url).origin,
         turnstileSiteKey: c.env.TURNSTILE_SITE_KEY || '',
         aiOn: c.env.ENABLE_AI !== 'false' && !!c.env.AI ? '已启用' : '未启用',
         vecOn: c.env.ENABLE_VECTORIZE !== 'false' && !!c.env.VECTORIZE ? '已启用' : '未启用',
-        imgbed: (() => {
-          const g = imgbedConfig(c.env)
-          return { configured: g.configured, base: g.base, tokenName: g.tokenName }
-        })()
+        imgbed: {
+          configured: g.configured,
+          base: g.base,
+          tokenName: g.tokenName,
+          tokenHint: S(c).imgbed_token_hint || '',
+          source: g.source,
+          canEditToken: g.canEditToken,
+          channel: g.channel,
+          channels: IMGBED_CHANNELS
+        }
       }
     })
   )
-)
+})
 
 app.post('/admin/settings', guard, async (c) => {
   const b = (await c.req.parseBody()) as Record<string, string>
-  await db.saveSettings(c.env, {
+  const channel = String(b.imgbed_channel || '')
+  const patch: Partial<SiteSettings> = {
     site_name: String(b.site_name || '').slice(0, 60),
     site_description: String(b.site_description || '').slice(0, 200),
     site_keywords: String(b.site_keywords || '').slice(0, 200),
     footer_text: String(b.footer_text || '').slice(0, 200),
     posts_per_page: String(Math.min(50, Math.max(1, Number(b.posts_per_page) || 10))),
     allow_comments: b.allow_comments === '1' ? '1' : '0',
-    turnstile_secret: String(b.turnstile_secret || '').slice(0, 80)
-  })
-  c.executionCtx.waitUntil(c.env.KV.delete('page:home:1:10'))
+    analytics_enabled: b.analytics_enabled === '1' ? '1' : '0',
+    turnstile_secret: String(b.turnstile_secret || '').slice(0, 80),
+    site_logo: String(b.site_logo || '').trim().slice(0, 500),
+    site_logo_height: String(Math.min(120, Math.max(24, Number(b.site_logo_height) || 36))),
+    imgbed_base_url: String(b.imgbed_base_url || '').trim().replace(/\/+$/, '').slice(0, 200),
+    imgbed_token_name: String(b.imgbed_token_name || '').trim().slice(0, 60),
+    imgbed_channel: ['s3', 'huggingface'].includes(channel) ? channel : ''
+  }
+
+  // Token 留空 = 不修改；勾「清除」则回到环境变量模式；填写则加密落库。
+  const rawToken = String(b.imgbed_token || '').trim()
+  if (b.imgbed_clear === '1') {
+    patch.imgbed_token_enc = ''
+    patch.imgbed_token_hint = ''
+  } else if (rawToken) {
+    if (!configCryptoReady(c.env)) return c.redirect('/admin/settings?err=nokey')
+    patch.imgbed_token_enc = await sealSecret(c.env, rawToken)
+    patch.imgbed_token_hint = tokenHint(rawToken)
+  }
+
+  // saveSettings 已清 settings:v1；页面 HTML 靠 CDN TTL 过期后自动更新
+  await db.saveSettings(c.env, patch)
   return c.redirect('/admin/settings?saved=1')
+})
+
+// 图床连通性测试：支持尚未保存的表单值，只读渠道列表、不上传测试图
+app.post('/admin/imgbed/test', guard, async (c) => {
+  const b = (await c.req.parseBody()) as Record<string, string>
+  const g = await imgbedConfig(c.env, {
+    ...S(c),
+    imgbed_base_url: String(b.imgbed_base_url ?? S(c).imgbed_base_url)
+  })
+  const typedBase = String(b.imgbed_base_url || '').trim().replace(/\/+$/, '')
+  if (typedBase) g.base = typedBase
+  const typedToken = String(b.imgbed_token || '').trim()
+  if (typedToken) g.token = typedToken
+  g.configured = !!g.token && !!g.base
+  return c.json(await imgbedTest(g))
 })
 
 app.post('/admin/password', guard, async (c) => {
@@ -739,8 +781,8 @@ app.post('/api/ai/summary-tags', guard, async (c) => {
 
 app.post('/api/upload', guard, async (c) => {
   const env = c.env
-  const cfg = imgbedConfig(env)
-  if (!cfg.configured) return c.json({ error: '图床未配置：请设置 IMGBED_TOKEN 密钥' }, 503)
+  const cfg = await imgbedConfig(env, S(c))
+  if (!cfg.configured) return c.json({ error: '图床未配置：请在「设置 → 图床接入」填写地址与 Token' }, 503)
 
   let form: FormData
   try {
@@ -753,7 +795,7 @@ app.post('/api/upload', guard, async (c) => {
   // Workers 请求体 / 图床 HF 渠道受 CPU 时间限制，图片建议控制在 20MB 内
   if (file.size > 20 * 1024 * 1024) return c.json({ error: '文件不能超过 20MB' }, 400)
   if (file.size === 0) return c.json({ error: '文件内容为空' }, 400)
-  const channel = String(form.get('channel') || '')
+  const channel = String(form.get('channel') || cfg.channel || '')
 
   const result = await imgbedUpload(cfg, file, channel)
   if (!result.ok || !result.url) return c.json({ error: result.error || '上传失败' }, 502)
@@ -768,18 +810,50 @@ app.post('/api/upload', guard, async (c) => {
   return c.json({ url: result.url, key: result.url, size: file.size, channel: result.channel })
 })
 
+// ── 访问打点（前端 beacon，永不缓存）──────────────────────────────────────
+// 页面 HTML 命中 CDN 时 Worker 不执行，所以浏览量只能靠这个独立轻量接口。
+// 25% 客户端采样 + 权重 ×4 聚合，单次最多 2 行 D1 写；后台可一键关闭。
+app.post('/api/hit', async (c) => {
+  c.header('cache-control', 'no-store')
+  // 统计关闭后，旧 CDN 缓存页仍可能继续打点，这里直接丢弃
+  if (S(c).analytics_enabled === '0') return c.json({ ok: false })
+  if (!sameOrigin(c)) return c.json({ ok: false }, 403)
+
+  let b: Record<string, string>
+  try {
+    b = (await c.req.parseBody()) as Record<string, string>
+  } catch {
+    return c.json({ ok: false }, 400)
+  }
+  const path = String(b.p || '')
+  // 只接受站内路径，拒绝查询串 / 协议 / 路径穿越，避免被当成任意写入接口
+  if (!/^\/[A-Za-z0-9._~%/\-]{0,199}$/.test(path) || path.includes('..')) {
+    return c.json({ ok: false }, 400)
+  }
+  const weight = Math.min(20, Math.max(1, Number(b.w) || 1))
+  try {
+    await db.recordHit(c.env, path, weight, c.req.raw.headers)
+    return c.json({ ok: true })
+  } catch {
+    // 统计失败绝不能影响访客体验
+    return c.json({ ok: false })
+  }
+})
+
 // ── 健康检查 ──
 app.get('/api/health', (c) =>
   c.json({
     ok: true,
     runtime: 'cloudflare-workers',
-    services: ['workers', 'd1', 'kv', 'r2', 'workers-ai', 'vectorize', 'turnstile', 'cron']
+    services: ['workers', 'd1', 'kv', 'external-image-host', 'workers-ai', 'vectorize', 'turnstile', 'cron', 'cdn-cache']
   })
 )
 
 // ── 404 ──
 app.notFound(async (c) => {
-  return c.html(V.notFound(await db.getSettings(c.env), await side(c.env)), 404)
+  const body = V.notFound(await db.getSettings(c.env), await side(c.env))
+  c.header('cache-control', 'private, no-store')
+  return c.html(body, 404)
 })
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -793,9 +867,9 @@ async function scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext
         await env.DB.prepare("DELETE FROM page_views WHERE created_at < datetime('now','-30 day')").run()
         // 2. 清理 90 天前的垃圾评论
         await env.DB.prepare("DELETE FROM comments WHERE status='spam' AND created_at < datetime('now','-90 day')").run()
-        // 3. 刷新设置缓存与首页缓存
+        // 3. 刷新设置与侧栏缓存（页面 HTML 交给 CDN，按 s-maxage 自然过期）
         await env.KV.delete('settings:v1')
-        await env.KV.delete('page:home:1:10')
+        await env.KV.delete('side:v1')
         // 4. 记录一条心跳，便于在后台确认 Cron 正常
         await env.KV.put('cron:last', new Date().toISOString())
       } catch {

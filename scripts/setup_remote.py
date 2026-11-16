@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-cf-press 远程资源初始化脚本（幂等，可重复执行）
+ABNcms 远程资源初始化脚本（幂等，可重复执行）
 
 前置：先执行 `npx wrangler login`
 作用：在 Cloudflare 账号下创建 D1 / KV / R2 / Vectorize 资源，
@@ -91,16 +91,6 @@ def extract_kv_id(text: str) -> str | None:
         return m.group(1)
     m = re.search(r"([0-9a-fA-F]{32})", text or "")
     return m.group(1) if m else None
-
-
-def first_dict(obj):
-    """按候选键名从字典里取值"""
-    if not isinstance(d, dict):
-        return None
-    for k in keys:
-        if k in d and d[k] not in (None, ""):
-            return d[k]
-    return None
 
 
 def step(title: str):

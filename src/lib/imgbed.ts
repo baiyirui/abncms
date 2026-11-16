@@ -1,15 +1,16 @@
-import type { Env } from '../types'
+import type { Env, SiteSettings } from '../types'
+import { configCryptoReady, openSecret } from './crypto'
 
 /**
- * 外部图床（CloudFlare-ImgBed / ABN图床）代理。
+ * 外部图床（CloudFlare-ImgBed 等兼容实现）代理。
  *
  * 设计要点：
- * - API Token 只放在 Cloudflare Secret（IMGBED_TOKEN），由 Worker 服务端注入
- *   Authorization 头转发，绝不下发到浏览器，避免泄露。
- * - 前端仍 POST 到本站 /api/upload，Worker 收到文件后二次转发到图床 /upload。
- * - 上传接口官方文档：POST /upload  -H "Authorization: Bearer <TOKEN>" -F "file=@..."
+ * - 配置三级优先级：后台 D1（AES-GCM 加密） > 环境变量 / Secret > 未配置。
+ *   Cloudflare Secret 运行时不可改，所以「后台可改」必须落库。
+ * - Token 永不下发浏览器：前端只 POST 本站 /api/upload，由 Worker 注入
+ *   Authorization: Bearer 后二次转发到图床 /upload。
+ * - 上传接口：POST /upload  -H "Authorization: Bearer <TOKEN>" -F "file=@..."
  *   用 returnFormat=full 拿到完整 URL，responseFormat=object 拿到对象结构。
- * - 渠道（uploadChannel）可选：s3(Backblaze B2) / huggingface，留空走图床默认渠道。
  */
 
 /** 后台可选的上传渠道 */
@@ -24,17 +25,54 @@ export interface ImgbedConfig {
   token: string
   configured: boolean
   tokenName: string
+  /** 默认上传渠道 */
+  channel: string
+  /** 当前生效的 Token 来源，供后台状态展示 */
+  source: 'database' | 'env' | 'none'
+  /** 是否允许后台写入 Token（取决于主密钥是否配置） */
+  canEditToken: boolean
 }
 
-export function imgbedConfig(env: Env): ImgbedConfig {
-  // 具体图床地址与 Token 名称由部署方的环境变量提供，源码不内置任何私有实例
-  const base = (env.IMGBED_BASE_URL || '').replace(/\/+$/, '')
-  const token = (env.IMGBED_TOKEN || '').trim()
+/** 解析生效配置。s 传当前请求上下文里的站点设置（S(c)）。 */
+export async function imgbedConfig(env: Env, s?: SiteSettings): Promise<ImgbedConfig> {
+  const canEditToken = configCryptoReady(env)
+  let dbToken = ''
+  if (s?.imgbed_token_enc && canEditToken) {
+    try {
+      dbToken = (await openSecret(env, s.imgbed_token_enc)).trim()
+    } catch {
+      dbToken = ''
+    }
+  }
+  const dbBase = (s?.imgbed_base_url || '').trim().replace(/\/+$/, '')
+  const envBase = (env.IMGBED_BASE_URL || '').trim().replace(/\/+$/, '')
+  const envToken = (env.IMGBED_TOKEN || '').trim()
+  const base = dbBase || envBase
+  const token = dbToken || envToken
   return {
     base,
     token,
     configured: !!token && !!base,
-    tokenName: env.IMGBED_TOKEN_NAME || ''
+    tokenName: s?.imgbed_token_name || env.IMGBED_TOKEN_NAME || '',
+    channel: s?.imgbed_channel || '',
+    source: dbToken ? 'database' : envToken ? 'env' : 'none',
+    canEditToken
+  }
+}
+
+/** 后台「测试连接」：只读图床渠道列表，不上传测试图、不污染图床 */
+export async function imgbedTest(cfg: ImgbedConfig): Promise<{ ok: boolean; message: string }> {
+  if (!cfg.base) return { ok: false, message: '未填写图床地址' }
+  if (!cfg.token) return { ok: false, message: '未配置 API Token' }
+  try {
+    const r = await fetch(`${cfg.base}/api/channels`, {
+      headers: { Authorization: `Bearer ${cfg.token}` }
+    })
+    const text = await r.text()
+    if (!r.ok) return { ok: false, message: `HTTP ${r.status} ${text.slice(0, 120)}` }
+    return { ok: true, message: (text.slice(0, 240) || '连接成功').trim() }
+  } catch (e: any) {
+    return { ok: false, message: e?.message || '连接失败' }
   }
 }
 
@@ -80,7 +118,7 @@ export async function imgbedUpload(
   file: File,
   channel = ''
 ): Promise<UploadResult> {
-  if (!cfg.configured) return { ok: false, error: '图床未配置：请设置 IMGBED_TOKEN 密钥' }
+  if (!cfg.configured) return { ok: false, error: '图床未配置：请在「设置 → 图床接入」填写地址与 Token' }
 
   const qs = new URLSearchParams({ returnFormat: 'full', responseFormat: 'object' })
   const ch = ALLOWED_CHANNELS.has(channel) ? channel : ''

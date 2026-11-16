@@ -13,6 +13,8 @@ export interface Env {
   IMGBED_TOKEN?: string
   /** 外部图床 Token 名称（仅用于后台展示，可明文） */
   IMGBED_TOKEN_NAME?: string
+  /** 后台写入的敏感配置加密主密钥（AES-GCM），不入库、页面不回显 */
+  CONFIG_ENCRYPTION_KEY?: string
   /** Vectorize 语义索引（可能为 undefined 时自动降级） */
   VECTORIZE?: any
   /** 静态资源 */
@@ -70,4 +72,13 @@ export interface SiteSettings {
   allow_comments: string
   turnstile_secret: string
   analytics_enabled: string
+  /** 站点 LOGO 完整外链，空则回退文字站名 */
+  site_logo: string
+  site_logo_height: string
+  /** 图床后台配置：地址 / Token 密文 / 掩码提示 / 名称 / 默认渠道 */
+  imgbed_base_url: string
+  imgbed_token_enc: string
+  imgbed_token_hint: string
+  imgbed_token_name: string
+  imgbed_channel: string
 }

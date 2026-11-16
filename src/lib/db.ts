@@ -1,17 +1,26 @@
 import type { Env, PostRow, SiteSettings } from '../types'
 
 const DEFAULT_SETTINGS: SiteSettings = {
-  site_name: '格熊',
-  site_description: '免费商用资源 · 字体 · AI 工具 · 数码技巧 · 生活妙招',
-  site_keywords: '免费资源,字体资源,工具技巧,热门资讯,生活妙招,经验分享,格熊',
-  footer_text: '© 格熊 gexiong.com · 免费资源与技巧分享',
+  site_name: 'ABNcms',
+  site_description: 'A lightweight CMS on the Cloudflare free tier',
+  site_keywords: 'ABNcms,Cloudflare Workers,D1,CMS',
+  footer_text: 'Powered by ABNcms · Cloudflare Workers + D1',
   posts_per_page: '10',
   allow_comments: '1',
   turnstile_secret: '2x0000000000000000000000000000000AA',
-  analytics_enabled: '1'
+  analytics_enabled: '1',
+  site_logo: '',
+  site_logo_height: '36',
+  imgbed_base_url: '',
+  imgbed_token_enc: '',
+  imgbed_token_hint: '',
+  imgbed_token_name: '',
+  imgbed_channel: ''
 }
 
-/** 站点设置：优先 KV 缓存（60s），回源 D1 */
+/** 站点设置：优先 KV 缓存，回源 D1。
+ *  TTL 设为 1 小时而非 60 秒：KV 免费额度只有 1,000 次写/天，
+ *  60 秒回源会产生最多 1,440 次写直接超额。保存设置时主动失效缓存。 */
 export async function getSettings(env: Env): Promise<SiteSettings> {
   const cacheKey = 'settings:v1'
   const cached = await env.KV.get(cacheKey, 'json')
@@ -23,7 +32,7 @@ export async function getSettings(env: Env): Promise<SiteSettings> {
     }>()
     const map: Record<string, string> = {}
     for (const r of results || []) map[r.key] = r.value
-    await env.KV.put(cacheKey, JSON.stringify(map), { expirationTtl: 60 })
+    await env.KV.put(cacheKey, JSON.stringify(map), { expirationTtl: 3600 })
     return { ...DEFAULT_SETTINGS, ...map }
   } catch {
     return { ...DEFAULT_SETTINGS }
@@ -196,10 +205,6 @@ export async function searchPosts(env: Env, q: string, limit = 30): Promise<Post
   return results || []
 }
 
-export async function bumpViews(env: Env, postId: number): Promise<void> {
-  await env.DB.prepare('UPDATE posts SET views = views + 1 WHERE id = ?').bind(postId).run()
-}
-
 // ── 评论 ────────────────────────────────────────────────────────────────────
 
 export async function listComments(env: Env, postId: number, onlyApproved = true) {
@@ -222,13 +227,28 @@ export async function addComment(env: Env, c: {
 
 // ── 统计 ────────────────────────────────────────────────────────────────────
 
-export async function recordView(env: Env, path: string, postId: number | null, headers: Headers) {
-  if (!postId && path !== '/') return
-  await env.DB.prepare(
-    'INSERT INTO page_views (path, post_id, country, referer) VALUES (?,?,?,?)'
+/**
+ * 聚合一次前端打点（/api/hit）。
+ *
+ * 页面 HTML 由 CDN 边缘缓存供给，Worker 根本不会执行，所以浏览量不能再在
+ * 渲染请求里写库。改由前端按 25% 采样发一个轻量 beacon，服务端按权重
+ * ×4 累加，使期望值仍等于真实浏览量；明细单次批量提交，最多 2 行写。
+ * 数字是估算值，可在后台「设置」里一键关闭统计以换取零写入。
+ */
+export async function recordHit(env: Env, path: string, weight: number, headers: Headers): Promise<void> {
+  const stmts: D1PreparedStatement[] = []
+  const m = /^\/p\/([A-Za-z0-9._~%-]{1,160})$/.exec(path)
+  if (m) {
+    stmts.push(
+      env.DB.prepare("UPDATE posts SET views = views + ? WHERE slug = ? AND status = 'published'")
+        .bind(weight, decodeURIComponent(m[1]))
+    )
+  }
+  stmts.push(
+    env.DB.prepare('INSERT INTO page_views (path, country, referer) VALUES (?,?,?)')
+      .bind(path.slice(0, 200), headers.get('cf-ipcountry') || '', (headers.get('referer') || '').slice(0, 200))
   )
-    .bind(path, postId, headers.get('cf-ipcountry') || '', headers.get('referer') || '')
-    .run()
+  await env.DB.batch(stmts)
 }
 
 export async function dashboardStats(env: Env) {
