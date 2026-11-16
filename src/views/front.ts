@@ -40,7 +40,7 @@ export function sidebarHtml(s: SideData): string {
     ? s.hot
         .map(
           (p) =>
-            `<div class="w-post"><a href="/p/${esc(p.slug)}">${esc(p.title)}</a><span class="v">${p.views}</span></div>`
+            `<div class="w-post"><a href="/p/${esc(p.slug)}.html">${esc(p.title)}</a><span class="v">${p.views}</span></div>`
         )
         .join('')
     : '<div class="small faint">暂无文章</div>'}
@@ -67,9 +67,9 @@ export function sidebarHtml(s: SideData): string {
 /** 列表式文章条目：标题 + 摘要 + meta（作者/日期/阅读量），有封面时左侧缩略图 */
 function postItem(p: PostRow): string {
   return `<article class="card post-item">
-  ${p.cover ? `<a class="thumb" href="/p/${esc(p.slug)}"><img src="${esc(p.cover)}" alt="${esc(p.title)}" loading="lazy"></a>` : ''}
+  ${p.cover ? `<a class="thumb" href="/p/${esc(p.slug)}.html"><img src="${esc(p.cover)}" alt="${esc(p.title)}" loading="lazy"></a>` : ''}
   <div class="body">
-    <h2><a href="/p/${esc(p.slug)}">${esc(p.title)}</a></h2>
+    <h2><a href="/p/${esc(p.slug)}.html">${esc(p.title)}</a></h2>
     <p class="excerpt">${esc(p.excerpt || p.ai_summary || '')}</p>
     <div class="meta">
       ${p.category_name ? `<a class="cat" href="/c/${esc(p.category_slug)}">${esc(p.category_name)}</a>` : ''}
@@ -93,7 +93,7 @@ export function home(o: {
   // 顶部横幅：优先取置顶且带封面的文章，否则取任意带封面文章
   const bannerPost = o.posts.find((p) => p.pinned && p.cover) || o.posts.find((p) => p.cover)
   const banner = bannerPost
-    ? `<a class="banner" href="/p/${esc(bannerPost.slug)}">
+    ? `<a class="banner" href="/p/${esc(bannerPost.slug)}.html">
   <img src="${esc(bannerPost.cover)}" alt="${esc(bannerPost.title)}">
   <span class="cap">${esc(bannerPost.title)}</span>
 </a>`
@@ -298,8 +298,8 @@ ${p.cover ? `<meta property="og:image" content="${esc(p.cover)}">` : ''}
   </div>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:32px 0 0" class="grid2">
-    ${o.prev ? `<a class="card pad" href="/p/${esc(o.prev.slug)}"><div class="small faint">上一篇</div><div style="font-weight:600;margin-top:3px">${esc(o.prev.title)}</div></a>` : '<span></span>'}
-    ${o.next ? `<a class="card pad" href="/p/${esc(o.next.slug)}" style="text-align:right"><div class="small faint">下一篇</div><div style="font-weight:600;margin-top:3px">${esc(o.next.title)}</div></a>` : '<span></span>'}
+    ${o.prev ? `<a class="card pad" href="/p/${esc(o.prev.slug)}.html"><div class="small faint">上一篇</div><div style="font-weight:600;margin-top:3px">${esc(o.prev.title)}</div></a>` : '<span></span>'}
+    ${o.next ? `<a class="card pad" href="/p/${esc(o.next.slug)}.html" style="text-align:right"><div class="small faint">下一篇</div><div style="font-weight:600;margin-top:3px">${esc(o.next.title)}</div></a>` : '<span></span>'}
   </div>
 
   ${
@@ -308,7 +308,7 @@ ${p.cover ? `<meta property="og:image" content="${esc(p.cover)}">` : ''}
     ${o.related
       .map(
         (r) =>
-          `<div class="w-post"><a href="/p/${esc(r.slug)}">${esc(r.title)}</a><span class="v">${r.views} 阅读</span></div>`
+          `<div class="w-post"><a href="/p/${esc(r.slug)}.html">${esc(r.title)}</a><span class="v">${r.views} 阅读</span></div>`
       )
       .join('')}</div>`
       : ''

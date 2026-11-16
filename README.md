@@ -18,13 +18,13 @@
 ### 1.2 架构
 
 ```
-浏览器 ──► Cloudflare CDN 缓存（匿名页面命中时直接返回，Worker 不执行）
-              │ 未命中
-              ▼
-        Cloudflare Worker（Hono SSR / 后台 / API / Cron）
+浏览器 ──► Cloudflare Worker（Hono SSR / 后台 / API / Cron）
+              │  匿名访客先查 KV 中的完整 HTML（键含 cache_gen 代数）
+              │  ├─ 命中 → 直接返回，0 次 D1 查询
+              │  └─ 未命中 → 读 D1 渲染 → 异步写入 KV
           ├── D1        文章 · 页面 · 用户 · 分类 · 标签 · 评论 · 设置
-          ├── KV        会话 · 设置缓存 · 侧栏缓存 · 限流
-          ├── Workers AI + Vectorize   摘要 / 标签 / 语义搜索
+          ├── KV        会话 · 设置 · 侧栏 · 限流 · **页面 HTML 缓存**
+          ├── Workers AI + Vectorize   摘要 / 标签 / 语义搜索（默认关闭）
           └── 外部图床   POST /upload（Token 由 Worker 服务端注入）
 ```
 
@@ -40,7 +40,7 @@
 | Workers AI | 每天 1 万 neurons | AI 功能可降级 |
 | R2 | 10 GB/月 | 本项目不使用 |
 
-**因此 ABNcms 的硬约束**：匿名页面走 CDN 缓存；CDN 未命中时单次前台请求 ≤5 次 D1 查询、≤2 次 KV 读。KV 写只发生在低频回源（设置缓存 1 小时、侧栏缓存 30 分钟各最多 1 次）与后台操作，正常浏览路径 **0 次 KV 写、0 次 D1 写**。
+**因此 ABNcms 的硬约束**：匿名页面命中 KV HTML 时 **0 次 D1 查询、0 次 KV 写**；未命中时 ≤5 次 D1 查询。KV 写只发生在低频回源（设置 1 小时、侧栏 30 分钟、页面首次访问）与后台操作。所有可选消耗功能都有后台开关，小站长可一键降到「只缓存 HTML + 少量读」。
 
 ### 1.4 「发布后是不是就静态了？」
 
@@ -48,18 +48,20 @@
 
 | 场景 | 谁在响应 | Workers | D1 | KV |
 |---|---|---|---|---|
-| 匿名前台，CDN 命中 | Cloudflare 边缘缓存 | 0 | 0 | 0 |
-| 匿名前台，CDN 未命中 | Worker 回源渲染 | 1 次 | 几次读 | 1–2 次读 |
-| 后台 / 搜索 / 评论 / 登录态 | Worker 动态处理 | 1 次 | 读写 | 读写 |
+| 匿名前台，页面缓存命中 | Worker 读 KV HTML 直接返回 | 1 次（极轻） | **0** | 1 读 |
+| 匿名前台，未命中 | Worker 回源渲染并异步写 KV | 1 次 | 几次读 | 1–2 读 + 1 写 |
+| 关闭页面缓存 | 每次实时渲染 | 1 次 | 几次读 | 读设置/侧栏 |
+| 后台 / 搜索 / 登录态 | Worker 动态处理 | 1 次 | 读写 | 读写 |
 
-- 匿名页面响应带 `Cache-Control: public, max-age=0, s-maxage=<TTL>, stale-while-revalidate=<N>`，TTL 按页面类型 120–1800 秒（首页 120s、文章 600s、标签云 1800s）；过期后先回旧内容再后台刷新，避免回源尖峰。
-- **登录态一律 `private, no-store`**：既不串号，也保证草稿不会被缓存后泄露给匿名访客。
-- 免费版 `workers.dev` 无法主动 purge CDN，所以发布/改文后靠 TTL 自然过期；后台编辑器的「查看（绕过缓存）」用 `?t=<时间戳>` 强制回源。绑定自定义域名后可在 Cloudflare 控制台手动清缓存。
-- 浏览量不再由渲染请求写库（CDN 命中时 Worker 根本不执行）。改为前端 25% 采样 beacon → `POST /api/hit` → 服务端权重 ×4 聚合，单次最多 2 行 D1 写；后台「设置 → 开启访问统计」可一键关闭，关闭后前台即为**零写入纯静态供给**。该数字是估算值，不是精确计费指标。
+- 页面 HTML 以 `page:g<cache_gen>:<path>` 存入 KV，TTL 7 天。**发布、改文、删文、改评论、改分类、改设置时只把 `cache_gen` +1**（1 次 D1 写），旧 key 立即「失踪」，全站页面下一秒就是新内容 —— 不需要 purge CDN，也不用逐页删除缓存。这是免费版 `workers.dev` 上唯一可靠的「即时更新」方案。
+- 文章正式地址是伪静态 **`/p/{slug}.html`**；旧的 `/p/{slug}` 会 301 跳到新地址，保留历史收录。RSS / Sitemap / 前台所有内链均已同步。
+- **登录态一律 `no-store`**，草稿与后台不进 KV；404 页也带 `<!--nocache-->` 标记不会被缓存，避免错误内容供给 7 天。
+- 浏览量由前端 25% 采样 beacon → `POST /api/hit` → 权重 ×4 聚合写 D1；后台可一键关闭，关闭后前台零写入。该数字是估算值，不是精确计费指标。
+- 后台「设置 → 功能开关」可分别关闭：页面缓存、侧栏热门、相关阅读、上下篇、语义搜索（Vectorize）、AI 摘要标签，以及评论、访问统计。关闭后对应 D1/KV 查询或写入**根本不执行**。小站长建议只保留页面缓存 + 热门文章。
 
 ### 1.5 功能一览
 
-**前台**：文章流、分类/标签/归档、全文 + 语义搜索、Markdown 渲染、AI 摘要、上下篇、相关阅读、评论、RSS / Sitemap / JSON-LD、两栏侧栏 widget。
+**前台**：文章流（`/p/{slug}.html` 伪静态）、分类/标签/归档、全文搜索、Markdown 渲染、AI 摘要、上下篇、相关阅读、评论、RSS / Sitemap / JSON-LD、两栏侧栏 widget —— **除核心渲染外全部可后台开关**。
 
 **后台**：登录（PBKDF2 + KV 会话 + 限流 + Turnstile）、文章 CRUD、Markdown 双栏编辑器、AI 摘要标签、**图床地址与 Token 可视化配置**、**站点 LOGO 上传**、媒体库、分类、评论审核、站点设置、修改密码、概览面板。
 
@@ -112,11 +114,11 @@ Cloudflare 的 Secret / 环境变量是**部署时绑定、write-only、运行�
 
 ### 2.3 典型链路
 
-**发文**：`POST /admin/post/*` → 同源校验 → Markdown 渲染 → upsert `posts` / `post_tags` → 更新向量索引 → 清侧栏 KV 缓存（页面 HTML 由 CDN TTL 兜底）。
+**发文**：`POST /admin/post/*` → 同源校验 → Markdown 渲染 → upsert `posts` / `post_tags` → （仅开启语义搜索时）更新向量索引 → `bumpCacheGen()` 递增代数，前台缓存即时失效。
 
 **传图**：`POST /api/upload`（FormData `file` + 可选 `channel`）→ Worker 注入 `Authorization: Bearer` → 图床 `/upload` → 外链写入 `media.key` → 返回 URL 插入编辑器。
 
-**匿名读文章**：CDN 命中直接返回（0 后端消耗）；未命中时 Worker 读站点设置 / 侧栏 KV 缓存 → 查 D1 → 渲染 HTML → 输出 CDN 缓存头。整条渲染路径**无任何写操作**，浏览量由页面里的 beacon 单独打到 `/api/hit`。
+**匿名读文章**：Worker 读 `settings:v1` → 拼出 `page:g<gen>:/p/xxx.html` → KV 命中直接返回（0 次 D1）；未命中则查 D1 渲染并 `waitUntil` 写 KV。渲染路径无 D1 写，浏览量由页面 beacon 单独打到 `/api/hit`。
 
 ### 2.4 技术栈
 
@@ -200,7 +202,8 @@ npm run deploy
 | 后台改不了图床 Token | 未配置 `CONFIG_ENCRYPTION_KEY`，当前是「仅环境变量模式」 |
 | 图片上传报「图床未配置」 | 后台「设置 → 图床接入」填地址与 Token，或设置 `IMGBED_TOKEN` Secret |
 | 站名回退成默认值 | `settings` 缺键或 D1 异常时回落；进后台保存一次即可 |
-| 改了站名 / LOGO / 设置，前台没立刻变 | CDN 按 TTL 过期；编辑器点「查看（绕过缓存）」，或绑定自定义域名后在控制台清缓存 |
+| 改了文章前台没立刻变 | 确认已部署 v0.2.1+；保存文章会自动递增 `cache_gen`，若仍为旧内容是浏览器缓存，按 Ctrl+F5 硬刷新 |
+| 改了站名 / LOGO / 设置，前台没立刻变 | 设置保存同样会递增缓存代数；如仍为旧内容，执行 `wrangler kv key delete settings:v1 --binding=KV --remote` |
 | 阅读量不动或跳得快 | 统计是 25% 采样 ×4 聚合的估算值；后台「开启访问统计」可关闭 |
 | 升级后后台缺 LOGO / 图床设置 | 旧库需跑 `python scripts/migrate.py` 补齐设置项 |
 | 子域注册失败 `10405` | 去 Cloudflare 控制台手动注册一次 `*.workers.dev` 子域 |
@@ -221,6 +224,7 @@ npm run deploy
 | 版本 | 内容 |
 |---|---|
 | **v0.2** | 图床/LOGO 后台化、品牌中性化、CDN 缓存与写入聚合、迁移框架 |
+| **v0.2.1** | `.html` 伪静态 + 旧链接 301、KV HTML 缓存 + `cache_gen` 即时失效、6 项额度开关 |
 | v0.3 | 独立页面、导航菜单、定时发布、URL 规则、导入导出备份 |
 | v0.4 | 声明式主题引擎、切换与预览、默认主题 Aurora |
 | v0.5 | 白名单 Hook、静态索引商店、一键安装 |

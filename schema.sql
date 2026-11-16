@@ -142,9 +142,17 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   ('imgbed_token_enc', ''),
   ('imgbed_token_hint',''),
   ('imgbed_token_name',''),
-  ('imgbed_channel',   '');
+  ('imgbed_channel',   ''),
+  ('cache_gen',        '1'),
+  ('enable_page_cache','1'),
+  ('enable_hot',       '1'),
+  ('enable_related',   '1'),
+  ('enable_prevnext',  '1'),
+  ('enable_semantic',  '0'),
+  ('enable_ai',        '0');
 
 -- 全新安装等同于已应用全部历史迁移，后续只需跑新增的 migrations/*.sql
 INSERT OR IGNORE INTO schema_migrations (version, description) VALUES
-  ('001_baseline',      'v0.1 initial schema (cf-press)'),
-  ('002_v0.2_settings', 'v0.2 site logo / image host / analytics settings');
+  ('001_baseline',         'v0.1 initial schema (cf-press)'),
+  ('002_v0.2_settings',    'v0.2 site logo / image host / analytics settings'),
+  ('003_cache_and_switches','v0.2.1 page cache generation / quota switches');

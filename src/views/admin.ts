@@ -51,7 +51,7 @@ ${pageHead('概览', `<a class="btn primary" href="/admin/post/new">写文章</a
         ? o.recent
             .map(
               (p) => `<tr>
-        <td><a href="/p/${esc(p.slug)}" target="_blank">${esc(p.title)}</a></td>
+        <td><a href="/p/${esc(p.slug)}.html" target="_blank">${esc(p.title)}</a></td>
         <td><span class="badge ${p.status === 'published' ? 'pub' : 'draft'}">${p.status === 'published' ? '已发布' : '草稿'}</span></td>
         <td class="small muted">${esc(p.category_name || '—')}</td>
         <td class="small muted">${p.views}</td>
@@ -99,7 +99,7 @@ ${o.msg ? `<div class="alert ok">${esc(o.msg)}</div>` : ''}
         ? o.posts
             .map(
               (p) => `<tr>
-        <td>${p.pinned ? '<span class="badge pin">顶</span> ' : ''}<a href="/p/${esc(p.slug)}" target="_blank">${esc(p.title)}</a></td>
+        <td>${p.pinned ? '<span class="badge pin">顶</span> ' : ''}<a href="/p/${esc(p.slug)}.html" target="_blank">${esc(p.title)}</a></td>
         <td><span class="badge ${p.status === 'published' ? 'pub' : 'draft'}">${p.status === 'published' ? '已发布' : '草稿'}</span></td>
         <td class="small muted">${esc(p.category_name || '—')}</td>
         <td class="small muted">${p.views}</td>
@@ -199,7 +199,7 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
   <div class="row">
     <label class="row small" style="gap:7px"><input type="checkbox" name="pinned" value="1" ${p?.pinned ? 'checked' : ''}> 置顶</label>
     <span class="grow"></span>
-    ${!isNew ? `<a class="btn" href="/p/${esc(p!.slug)}?t=${Date.now()}" target="_blank" title="带随机参数绕过 CDN 缓存，立即查看最新内容">查看（绕过缓存）</a>` : ''}
+    ${!isNew ? `<a class="btn" href="/p/${esc(p!.slug)}.html" target="_blank" title="发布后缓存会自动失效，无需手动绕过">查看文章</a>` : ''}
     <button class="btn primary" type="submit">${isNew ? '发布' : '保存修改'}</button>
   </div>
 </form>
@@ -273,7 +273,7 @@ ${o.msg ? `<div class="alert ok">${esc(o.msg)}</div>` : ''}
               (c) => `<tr>
         <td class="small">${esc(c.author)}</td>
         <td class="small">${esc(c.content).slice(0, 90)}</td>
-        <td class="small muted"><a href="/p/${esc(c.post_slug || '')}" target="_blank">${esc(c.post_title || '—')}</a></td>
+        <td class="small muted"><a href="/p/${esc(c.post_slug || '')}.html" target="_blank">${esc(c.post_title || '—')}</a></td>
         <td><span class="badge ${c.status === 'approved' ? 'pub' : 'draft'}">${esc(c.status)}</span></td>
         <td class="small muted">${fmtDate(c.created_at)}</td>
         <td style="text-align:right;white-space:nowrap">
@@ -408,7 +408,20 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
       </select></div>
   </div>
   <div class="field"><label class="row small" style="gap:7px;font-weight:500"><input type="checkbox" name="analytics_enabled" value="1" ${s.analytics_enabled !== '0' ? 'checked' : ''}> 开启访问统计（前端异步打点）</label>
-    <div class="small faint" style="margin-top:5px;line-height:1.7">关闭后前台页面完全由 CDN 边缘缓存供给，命中时 Worker 不执行、<b>D1 / KV / Workers 消耗为 0</b>；开启后仅有轻量打点请求，阅读量为采样估算值。改动在 CDN 缓存过期后对所有访客生效。</div></div>
+    <div class="small faint" style="margin-top:5px;line-height:1.7">关闭后前台不再发送打点请求，<b>阅读量零写入</b>；开启后仅 25% 采样上报，权重 ×4 还原估算阅读量。</div></div>
+
+  <div class="small muted" style="font-weight:600;margin:22px 0 12px;border-top:1px solid var(--border);padding-top:18px">功能开关 · 免费额度控制</div>
+  <div class="small faint" style="margin-bottom:12px;line-height:1.7">关掉的功能不会产生对应的 D1 查询或 KV 写入。<b>页面缓存建议保持开启</b>：匿名访客命中缓存后只花 1 次 KV 读、<b>0 次 D1 查询</b>；发布或改评论时缓存代数 +1，全站页面立刻更新，不会出现「后台改了前台不显示」。</div>
+  <div class="grid2">
+    <label class="row small" style="gap:7px;font-weight:500"><input type="checkbox" name="enable_page_cache" value="1" ${s.enable_page_cache !== '0' ? 'checked' : ''}> 页面 HTML 缓存（推荐开启）</label>
+    <label class="row small" style="gap:7px;font-weight:500"><input type="checkbox" name="enable_hot" value="1" ${s.enable_hot !== '0' ? 'checked' : ''}> 侧栏热门文章</label>
+    <label class="row small" style="gap:7px;font-weight:500"><input type="checkbox" name="enable_related" value="1" ${s.enable_related !== '0' ? 'checked' : ''}> 文末相关阅读</label>
+    <label class="row small" style="gap:7px;font-weight:500"><input type="checkbox" name="enable_prevnext" value="1" ${s.enable_prevnext !== '0' ? 'checked' : ''}> 上一篇 / 下一篇</label>
+    <label class="row small" style="gap:7px;font-weight:500"><input type="checkbox" name="enable_semantic" value="1" ${s.enable_semantic === '1' ? 'checked' : ''}> 语义搜索（Vectorize，较耗额度）</label>
+    <label class="row small" style="gap:7px;font-weight:500"><input type="checkbox" name="enable_ai" value="1" ${s.enable_ai === '1' ? 'checked' : ''}> AI 摘要 / 标签（Workers AI）</label>
+  </div>
+  <div class="small faint" style="margin-top:8px;line-height:1.7">小站长建议：只开「页面缓存 + 热门文章」，其余全关。评论关闭后前台不查评论、不加载验证组件；语义搜索与 AI 默认关闭，开启前请确认配额。</div>
+
   <div class="small muted" style="font-weight:600;margin:22px 0 12px;border-top:1px solid var(--border);padding-top:18px">站点 LOGO</div>
   <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
     <div id="logo-preview" style="min-width:160px;height:60px;display:flex;align-items:center;justify-content:center;background:var(--bg-2,#f6f7f9);border:1px dashed var(--border);border-radius:8px;padding:8px">
@@ -472,8 +485,9 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
     <div>Workers AI：${esc(o.envInfo.aiOn)} · Vectorize：${esc(o.envInfo.vecOn)}</div>
     <div>图片存储：${im ? (im.configured ? `外部图床 <a href="${esc(im.base)}" target="_blank" rel="noopener">${esc(im.base)}</a>（${im.source === 'database' ? '后台配置' : '环境变量'}）` : '图床未配置') : '—'}</div>
     <div>运行时：Cloudflare Workers · D1 · KV · 图床代理上传</div>
-    <div>页面缓存：匿名前台 <code>s-maxage</code> + <code>stale-while-revalidate</code> 边缘缓存；登录态 / 后台 / 搜索不缓存</div>
-    <div>访问统计：${s.analytics_enabled !== '0' ? '开启（25% 采样打点，权重 ×4）' : '关闭（零写入，纯静态供给）'}</div>
+    <div>页面缓存：${s.enable_page_cache !== '0' ? `KV HTML 缓存 · 当前代数 g${esc(s.cache_gen || '1')} · 发布即失效` : '已关闭（每次实时查库）'}；登录态 / 后台 / 搜索不缓存</div>
+    <div>功能开关：热门 ${s.enable_hot !== '0' ? '开' : '关'} · 相关 ${s.enable_related !== '0' ? '开' : '关'} · 上下篇 ${s.enable_prevnext !== '0' ? '开' : '关'} · 语义 ${s.enable_semantic === '1' ? '开' : '关'} · AI ${s.enable_ai === '1' ? '开' : '关'}</div>
+    <div>访问统计：${s.analytics_enabled !== '0' ? '开启（25% 采样打点，权重 ×4）' : '关闭（零写入）'}</div>
   </div>
 </div>
 <script type="module" src="/admin.js"></script>`

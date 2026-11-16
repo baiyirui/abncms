@@ -81,4 +81,13 @@ export interface SiteSettings {
   imgbed_token_hint: string
   imgbed_token_name: string
   imgbed_channel: string
+  /** 页面缓存代数：发布时 +1，旧 key 立即失效（KV 只需 1 次写） */
+  cache_gen: string
+  /** 额度开关：0 = 关闭对应功能，不再产生 D1/KV 查询或写入 */
+  enable_page_cache: string
+  enable_hot: string
+  enable_related: string
+  enable_prevnext: string
+  enable_semantic: string
+  enable_ai: string
 }

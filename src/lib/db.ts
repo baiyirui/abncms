@@ -15,7 +15,14 @@ const DEFAULT_SETTINGS: SiteSettings = {
   imgbed_token_enc: '',
   imgbed_token_hint: '',
   imgbed_token_name: '',
-  imgbed_channel: ''
+  imgbed_channel: '',
+  cache_gen: '1',
+  enable_page_cache: '1',
+  enable_hot: '1',
+  enable_related: '1',
+  enable_prevnext: '1',
+  enable_semantic: '0',
+  enable_ai: '0'
 }
 
 /** 站点设置：优先 KV 缓存，回源 D1。
@@ -47,6 +54,30 @@ export async function saveSettings(env: Env, patch: Partial<SiteSettings>): Prom
   )
   if (stmts.length) await env.DB.batch(stmts)
   await env.KV.delete('settings:v1')
+  // 任何设置变化都可能影响已缓存 HTML（外观、开关、评论等），
+  // 统一递增代数：只多 1 次 D1 写，换来「保存即生效」，避免站长困惑。
+  await bumpCacheGen(env, false)
+}
+
+/**
+ * 递增页面缓存代数并清掉派生缓存。
+ *
+ * 页面 HTML 以 `page:g<gen>:<path>` 存 KV，读时也带代数。发布/改文时只把
+ * cache_gen +1，所有旧 key 瞬间「失踪」（TTL 到期自动清理），无需逐条
+ * delete —— 这样每次发布只付 1 次 D1 写 + 1 次 KV 写，不受文章数影响。
+ *
+ * @param alsoSettings 是否同时清设置缓存（发布文章时不需要）
+ */
+export async function bumpCacheGen(env: Env, alsoSettings = true): Promise<void> {
+  try {
+    await env.DB.prepare(
+      "UPDATE settings SET value = CAST(value AS INTEGER) + 1 WHERE key = 'cache_gen'"
+    ).run()
+  } catch {
+    /* 旧库缺键时由迁移补齐，这里不能影响发布主流程 */
+  }
+  if (alsoSettings) await env.KV.delete('settings:v1')
+  await env.KV.delete('side:v1')
 }
 
 // ── 文章查询 ────────────────────────────────────────────────────────────────

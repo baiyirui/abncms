@@ -61,35 +61,59 @@ function sameOrigin(c: any): boolean {
 }
 
 /**
- * 匿名前台页面交给 Cloudflare CDN 边缘缓存：缓存命中时请求根本不进 Worker，
- * 因此 Workers / D1 / KV 消耗都是 0 —— 这就是「发布后近似静态」的实现。
- *
- * - stale-while-revalidate：过期后先回旧内容再后台刷新，避免回源尖峰。
- * - 登录态一律 private,no-store：防止会话串号，也防止草稿被缓存后泄露。
- * - 后台 / 搜索 / 错误页传 0，同样不缓存。
- * 注意：免费版 workers.dev 无法主动 purge CDN，内容更新靠 s-maxage 自然过期；
- * 后台编辑器的「查看（绕过缓存）」用 ?t= 参数强制回源。绑定自定义域名后
- * 可在 Cloudflare 控制台手动清除缓存。
+ * 前台 HTML 输出：一律 no-store，缓存交给 Worker 内的 KV 层（见 cachedPage）。
+ * 这样浏览器/CDN 不会缓存旧页面，发布后改 cache_gen 即可让全站立刻更新，
+ * 同时命中 KV 的请求不再查 D1 —— 兼顾「像正常 CMS 一样即时」与低额度。
+ * 登录态同样 no-store，防止草稿泄露与会话串号。
  */
-function html(c: any, body: string, cacheSeconds = 0) {
-  const h: Record<string, string> = { 'content-type': 'text/html; charset=utf-8' }
-  if (cacheSeconds > 0 && !U(c)) {
-    const swr = Math.min(86400, cacheSeconds * 24)
-    h['cache-control'] = `public, max-age=0, s-maxage=${cacheSeconds}, stale-while-revalidate=${swr}`
-  } else {
-    h['cache-control'] = 'private, no-store'
-  }
-  return c.body(body, { headers: h })
+function html(c: any, body: string, _cacheSeconds = 0) {
+  return c.body(body, {
+    headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }
+  })
 }
 
-/** 边栏数据：热门文章 / 分类目录 / 热门标签（KV 缓存 5 分钟） */
-async function side(env: Env): Promise<import('./views/front').SideData> {
+/** 渲染结果前缀：标记「这页不许缓存」（404 / 草稿），避免错误内容被供给 7 天 */
+const NO_CACHE = '<!--abncms:nocache-->'
+
+/**
+ * 页面级 KV 缓存（带代数）：
+ *  - 只有匿名访客且开启 enable_page_cache 时才读/写；
+ *  - key 含 cache_gen，发布时代数 +1，旧 key 自然失效，无需逐条删除；
+ *  - 命中直接返回 HTML，0 次 D1 查询；未命中才渲染并写 1 次 KV。
+ * TTL 用 7 天兜底（页数不多，且发布会主动失效），KV 写只在首次访问发生时。
+ */
+async function cachedPage(
+  c: any,
+  s: SiteSettings,
+  render: () => Promise<string>,
+  ttl = 604800
+): Promise<Response> {
+  if (!U(c) && s.enable_page_cache !== '0') {
+    const key = `page:g${s.cache_gen || '1'}:${c.req.path}`
+    const hit = await c.env.KV.get(key)
+    if (hit) return html(c, hit)
+    const body = await render()
+    if (body.startsWith(NO_CACHE)) return html(c, body.slice(NO_CACHE.length))
+    c.executionCtx.waitUntil(c.env.KV.put(key, body, { expirationTtl: ttl }))
+    return html(c, body)
+  }
+  const body = await render()
+  return html(c, body.startsWith(NO_CACHE) ? body.slice(NO_CACHE.length) : body)
+}
+
+/** 边栏数据：热门文章 / 分类目录 / 热门标签（KV 缓存 30 分钟） */
+async function side(env: Env, s?: SiteSettings): Promise<import('./views/front').SideData> {
+  const empty: import('./views/front').SideData = { hot: [], cats: [], tags: [] }
   const hit = await env.KV.get('side:v1', 'json')
   if (hit) return hit as import('./views/front').SideData
+  // 关掉热门文章后，热门那条 D1 查询直接不执行
+  const wantHot = !s || s.enable_hot !== '0'
   const [hotRes, cats, tags] = await Promise.all([
-    env.DB.prepare(
-      "SELECT id, slug, title, views FROM posts WHERE status = 'published' ORDER BY views DESC LIMIT 8"
-    ).all<any>(),
+    wantHot
+      ? env.DB.prepare(
+          "SELECT id, slug, title, views FROM posts WHERE status = 'published' ORDER BY views DESC LIMIT 8"
+        ).all<any>()
+      : Promise.resolve({ results: [] as any[] }),
     db.listCategories(env),
     db.listTags(env)
   ])
@@ -113,14 +137,13 @@ app.get('/', async (c) => {
   const perPage = Math.min(50, Math.max(1, Number(s.posts_per_page) || 10))
   const { page, offset } = paginate(c.req.query(), perPage)
 
-  // 不再写 KV 页面缓存：CDN 命中时 Worker 不执行；未命中时回源 D1，
-  // D1 读额度（500 万行/天）远比 KV 写额度（1,000 次/天）宽裕。
-  const [posts, total] = await Promise.all([
-    db.listPosts(env, { status: 'published', limit: perPage, offset }),
-    db.countPosts(env, { status: 'published' })
-  ])
-  const body = V.home({ posts, cur: page, total, perPage, settings: s, side: await side(env) })
-  return html(c, body, 120)
+  return cachedPage(c, s, async () => {
+    const [posts, total] = await Promise.all([
+      db.listPosts(env, { status: 'published', limit: perPage, offset }),
+      db.countPosts(env, { status: 'published' })
+    ])
+    return V.home({ posts, cur: page, total, perPage, settings: s, side: await side(env, s) })
+  })
 })
 
 app.get('/archive', async (c) => {
@@ -128,11 +151,13 @@ app.get('/archive', async (c) => {
   const s = S(c)
   const perPage = 40
   const { page, offset } = paginate(c.req.query(), perPage)
-  const [posts, total] = await Promise.all([
-    db.listPosts(env, { status: 'published', limit: perPage, offset }),
-    db.countPosts(env, { status: 'published' })
-  ])
-  return html(c, V.archive({ posts, cur: page, total, perPage, settings: s, side: await side(env) }), 300)
+  return cachedPage(c, s, async () => {
+    const [posts, total] = await Promise.all([
+      db.listPosts(env, { status: 'published', limit: perPage, offset }),
+      db.countPosts(env, { status: 'published' })
+    ])
+    return V.archive({ posts, cur: page, total, perPage, settings: s, side: await side(env, s) })
+  })
 })
 
 app.get('/c/:slug', async (c) => {
@@ -141,113 +166,125 @@ app.get('/c/:slug', async (c) => {
   const cat = await env.DB.prepare('SELECT * FROM categories WHERE slug = ?')
     .bind(c.req.param('slug'))
     .first<any>()
-  if (!cat) return html(c, V.notFound(s, await side(env), '分类不存在'), 0)
+  if (!cat) return html(c, V.notFound(s, await side(env, s), '分类不存在'))
   const perPage = Number(s.posts_per_page) || 10
   const { page, offset } = paginate(c.req.query(), perPage)
-  const [posts, total] = await Promise.all([
-    db.listPosts(env, { status: 'published', categoryId: cat.id, limit: perPage, offset }),
-    db.countPosts(env, { status: 'published', categoryId: cat.id })
-  ])
-  return html(
-    c,
-    V.categoryPage({ category: cat, posts, cur: page, total, perPage, settings: s, side: await side(env) }),
-    300
-  )
+  return cachedPage(c, s, async () => {
+    const [posts, total] = await Promise.all([
+      db.listPosts(env, { status: 'published', categoryId: cat.id, limit: perPage, offset }),
+      db.countPosts(env, { status: 'published', categoryId: cat.id })
+    ])
+    return V.categoryPage({ category: cat, posts, cur: page, total, perPage, settings: s, side: await side(env, s) })
+  })
 })
 
 app.get('/t/:slug', async (c) => {
   const env = c.env
   const s = S(c)
   const tag = await env.DB.prepare('SELECT * FROM tags WHERE slug = ?').bind(c.req.param('slug')).first<any>()
-  if (!tag) return html(c, V.notFound(s, await side(env), '标签不存在'))
+  if (!tag) return html(c, V.notFound(s, await side(env, s), '标签不存在'))
   const perPage = Number(s.posts_per_page) || 10
   const { page, offset } = paginate(c.req.query(), perPage)
-  const [posts, total] = await Promise.all([
-    db.listPosts(env, { status: 'published', tagId: tag.id, limit: perPage, offset }),
-    db.countPosts(env, { status: 'published', tagId: tag.id })
-  ])
-  return html(c, V.tagPage({ tag, posts, cur: page, total, perPage, settings: s, side: await side(env) }), 300)
+  return cachedPage(c, s, async () => {
+    const [posts, total] = await Promise.all([
+      db.listPosts(env, { status: 'published', tagId: tag.id, limit: perPage, offset }),
+      db.countPosts(env, { status: 'published', tagId: tag.id })
+    ])
+    return V.tagPage({ tag, posts, cur: page, total, perPage, settings: s, side: await side(env, s) })
+  })
 })
 
 app.get('/tags', async (c) => {
-  return html(c, V.tagsPage({ tags: await db.listTags(c.env), settings: S(c), side: await side(c.env) }), 600)
+  const s = S(c)
+  return cachedPage(c, s, async () =>
+    V.tagsPage({ tags: await db.listTags(c.env), settings: s, side: await side(c.env, s) })
+  )
 })
 
 app.get('/search', async (c) => {
   const env = c.env
   const s = S(c)
   const q = (c.req.query('q') || '').trim()
-  if (!q) return html(c, V.searchPage({ q: '', results: [], semantic: [], settings: s, side: await side(env) }), 600)
+  if (!q) return html(c, V.searchPage({ q: '', results: [], semantic: [], settings: s, side: await side(env, s) }))
 
   const kw = await db.searchPosts(env, q, 30)
   const seen = new Set(kw.map((p) => p.id))
   const semIds: number[] = []
-
-  // Workers AI + Vectorize：语义相似补充
-  const sem = await semanticSearch(env, q, 8)
   const extra: PostRow[] = []
-  for (const m of sem) {
-    if (seen.has(m.id)) {
-      semIds.push(m.id)
-      continue
-    }
-    const p = await db.getPostById(env, m.id)
-    if (p && p.status === 'published') {
-      extra.push(p)
-      semIds.push(p.id)
-      seen.add(p.id)
+
+  // 语义搜索默认关闭：Workers AI / Vectorize 会额外吃额度，站长可自行开启
+  if (s.enable_semantic === '1') {
+    const sem = await semanticSearch(env, q, 8)
+    for (const m of sem) {
+      if (seen.has(m.id)) {
+        semIds.push(m.id)
+        continue
+      }
+      const p = await db.getPostById(env, m.id)
+      if (p && p.status === 'published') {
+        extra.push(p)
+        semIds.push(p.id)
+        seen.add(p.id)
+      }
     }
   }
 
   const results = [...kw, ...extra]
-  return html(c, V.searchPage({ q, results, semantic: semIds, settings: s, side: await side(env) }))
+  return html(c, V.searchPage({ q, results, semantic: semIds, settings: s, side: await side(env, s) }))
 })
 
-app.get('/p/:slug', async (c) => {
-  const env = c.env
+/** 文章页：/p/{slug}.html 为正式地址；老 /p/{slug} 301 过去，保住旧链接权重 */
+const articleRoute = async (c: any) => {
+  const env: Env = c.env
   const s = S(c)
-  const slug = c.req.param('slug')
-  const p = await db.getPostBySlug(env, slug)
-  if (!p) return html(c, V.notFound(s, await side(env), '文章不存在'))
-  // 草稿仅登录用户可见
-  if (p.status !== 'published' && !U(c)) return html(c, V.notFound(s, await side(env), '文章不存在'))
+  const raw = c.req.param('slug')
+  if (!raw.endsWith('.html')) return c.redirect('/p/' + raw + '.html', 301)
+  const slug = raw.slice(0, -5)
 
-  const [tags, comments] = await Promise.all([
-    db.getPostTags(env, p.id),
-    db.listComments(env, p.id, true)
-  ])
+  return cachedPage(c, s, async () => {
+    const p = await db.getPostBySlug(env, slug)
+    // 404 与未登录草稿绝不进 KV，否则会错误供给所有访客 7 天
+    if (!p) return NO_CACHE + V.notFound(s, await side(env, s), '文章不存在')
+    if (p.status !== 'published' && !U(c))
+      return NO_CACHE + V.notFound(s, await side(env, s), '文章不存在')
 
-  const prev = await env.DB.prepare(
-    "SELECT id, slug, title FROM posts WHERE status='published' AND COALESCE(published_at,created_at) < ? ORDER BY COALESCE(published_at,created_at) DESC LIMIT 1"
-  )
-    .bind(p.published_at || p.created_at)
-    .first<PostRow>()
-  const next = await env.DB.prepare(
-    "SELECT id, slug, title FROM posts WHERE status='published' AND COALESCE(published_at,created_at) > ? ORDER BY COALESCE(published_at,created_at) ASC LIMIT 1"
-  )
-    .bind(p.published_at || p.created_at)
-    .first<PostRow>()
-  const related = p.category_id
-    ? await db.listPosts(env, { status: 'published', categoryId: p.category_id, limit: 4, offset: 0 })
-    : []
-  const rel = related.filter((r) => r.id !== p.id).slice(0, 3)
+    const [tags, comments] = await Promise.all([
+      db.getPostTags(env, p.id),
+      s.allow_comments === '1' ? db.listComments(env, p.id, true) : Promise.resolve([])
+    ])
 
-  const body = V.postPage({
-    post: p,
-    tags,
-    comments,
-    related: rel,
-    prev: prev || null,
-    next: next || null,
-    settings: s,
-    allowComment: s.allow_comments === '1',
-    siteKey: env.TURNSTILE_SITE_KEY || '',
-    side: await side(env)
+    // 上下篇 / 相关阅读都可用开关关掉，省下 2~3 次 D1 查询
+    let prev: PostRow | null = null
+    let next: PostRow | null = null
+    if (s.enable_prevnext !== '0') {
+      prev = await env.DB.prepare(
+        "SELECT id, slug, title FROM posts WHERE status='published' AND COALESCE(published_at,created_at) < ? ORDER BY COALESCE(published_at,created_at) DESC LIMIT 1"
+      ).bind(p.published_at || p.created_at).first<PostRow>()
+      next = await env.DB.prepare(
+        "SELECT id, slug, title FROM posts WHERE status='published' AND COALESCE(published_at,created_at) > ? ORDER BY COALESCE(published_at,created_at) ASC LIMIT 1"
+      ).bind(p.published_at || p.created_at).first<PostRow>()
+    }
+    let rel: PostRow[] = []
+    if (s.enable_related !== '0' && p.category_id) {
+      const related = await db.listPosts(env, { status: 'published', categoryId: p.category_id, limit: 4, offset: 0 })
+      rel = related.filter((r) => r.id !== p.id).slice(0, 3)
+    }
+
+    return V.postPage({
+      post: p,
+      tags,
+      comments,
+      related: rel,
+      prev: prev || null,
+      next: next || null,
+      settings: s,
+      allowComment: s.allow_comments === '1',
+      siteKey: env.TURNSTILE_SITE_KEY || '',
+      side: await side(env, s)
+    })
   })
-
-  // 浏览量改由前端 beacon 打到 /api/hit，渲染路径零写入
-  return html(c, body, p.status === 'published' ? 600 : 0)
-})
+}
+app.get('/p/:slug', articleRoute)
 
 // ── 评论提交 ──
 app.post('/comment', async (c) => {
@@ -264,7 +301,7 @@ app.post('/comment', async (c) => {
   if (!ok) return c.text('人机验证未通过', 400)
 
   const content = String(b.content || '').trim()
-  if (!content) return c.redirect('/p/' + post.slug)
+  if (!content) return c.redirect('/p/' + post.slug + '.html')
   await db.addComment(env, {
     post_id: postId,
     author: String(b.author || '匿名').slice(0, 40),
@@ -273,9 +310,10 @@ app.post('/comment', async (c) => {
     content: content.slice(0, 1000),
     status: 'approved'
   })
-  // 免费版无法主动 purge CDN：提交者用 ?t= 强制回源立即看到新评论，
-  // 其他访客在 s-maxage 过期后看到，避免为一条评论付一次全站失效代价。
-  return c.redirect('/p/' + post.slug + '?t=' + Date.now() + '#comments')
+  // 新评论要让文章页缓存失效：递增代数（1 次 D1 写 + 1 次 KV 写），
+  // 全站页面随之刷新，所有访客都能立刻看到，而不是只有提交者。
+  await db.bumpCacheGen(env)
+  return c.redirect('/p/' + post.slug + '.html#comments')
 })
 
 // ── RSS ──
@@ -288,8 +326,8 @@ app.get('/feed.xml', async (c) => {
     .map(
       (p) => `<item>
       <title>${esc(p.title)}</title>
-      <link>${base}/p/${esc(p.slug)}</link>
-      <guid>${base}/p/${esc(p.slug)}</guid>
+      <link>${base}/p/${esc(p.slug)}.html</link>
+      <guid>${base}/p/${esc(p.slug)}.html</guid>
       <pubDate>${new Date(String(p.published_at || p.created_at).replace(' ', 'T') + 'Z').toUTCString()}</pubDate>
       <description>${esc(p.excerpt || p.ai_summary || '')}</description>
     </item>`
@@ -324,7 +362,7 @@ app.get('/sitemap.xml', async (c) => {
   ${url('/tags', '0.4')}
   ${cats.map((x) => url('/c/' + x.slug, '0.6')).join('\n  ')}
   ${tags.map((x) => url('/t/' + x.slug, '0.4')).join('\n  ')}
-  ${posts.map((p) => url('/p/' + p.slug, '0.8')).join('\n  ')}
+  ${posts.map((p) => url('/p/' + p.slug + '.html', '0.8')).join('\n  ')}
 </urlset>`
   return c.body(xml, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=600, s-maxage=21600, stale-while-revalidate=86400' } })
 })
@@ -436,8 +474,12 @@ app.get('/admin', guard, async (c) => {
       user: U(c)!,
       services: [
         { name: 'D1', ok: true, note: '文章/用户/评论' },
-        { name: 'KV', ok: true, note: '会话 / 设置 / 侧栏缓存' },
-        { name: 'CDN 页面缓存', ok: true, note: '匿名前台 s-maxage + SWR' },
+        { name: 'KV', ok: true, note: '会话 / 设置 / 页面 HTML 缓存' },
+        {
+          name: '页面缓存',
+          ok: S(c).enable_page_cache !== '0',
+          note: S(c).enable_page_cache !== '0' ? `KV HTML · 代数 g${S(c).cache_gen || '1'}，发布即失效` : '已关闭（每次实时查库）'
+        },
         {
           name: '图床',
           ok: img.configured,
@@ -445,9 +487,21 @@ app.get('/admin', guard, async (c) => {
             ? img.base.replace(/^https?:\/\//, '') + ' · ' + (img.source === 'database' ? '后台配置' : '环境变量')
             : '未配置地址或 Token'
         },
-        { name: 'Workers AI', ok: env.ENABLE_AI !== 'false' && !!env.AI, note: env.AI_SUMMARY_MODEL || 'llama-3.2-3b' },
-        { name: 'Vectorize', ok: env.ENABLE_VECTORIZE !== 'false' && !!env.VECTORIZE, note: '语义搜索' },
-        { name: 'Turnstile', ok: true, note: '人机验证' },
+        {
+          name: 'Workers AI',
+          ok: S(c).enable_ai === '1' && env.ENABLE_AI !== 'false' && !!env.AI,
+          note: S(c).enable_ai === '1' ? env.AI_SUMMARY_MODEL || 'llama-3.2-3b' : '后台已关闭'
+        },
+        {
+          name: 'Vectorize',
+          ok: S(c).enable_semantic === '1' && env.ENABLE_VECTORIZE !== 'false' && !!env.VECTORIZE,
+          note: S(c).enable_semantic === '1' ? '语义搜索已开启' : '后台已关闭'
+        },
+        {
+          name: 'Turnstile',
+          ok: !env.TURNSTILE_SITE_KEY || !/^(off|none|disabled)$/i.test(env.TURNSTILE_SITE_KEY),
+          note: !env.TURNSTILE_SITE_KEY || /^(off|none|disabled)$/i.test(env.TURNSTILE_SITE_KEY) ? '已关闭' : '人机验证'
+        },
         { name: 'Cron', ok: true, note: '每日清理' }
       ]
     })
@@ -477,7 +531,7 @@ const editorRoute = async (c: any, post: PostRow | null, msg?: string, err?: str
       user: U(c)!,
       msg,
       err,
-      aiEnabled: env.ENABLE_AI !== 'false' && !!env.AI,
+      aiEnabled: S(c).enable_ai === '1' && env.ENABLE_AI !== 'false' && !!env.AI,
       siteKey: env.TURNSTILE_SITE_KEY || ''
     })
   )
@@ -536,13 +590,14 @@ const savePost = async (c: any, id: number | null) => {
   const tagNames = String(b.tags || '').split(/[,，]/).map((s) => s.trim()).filter(Boolean)
   await db.syncTags(env, postId!, tagNames)
 
-  // 向量索引（异步，不阻塞响应）
-  if (status === 'published') {
+  // 向量索引默认关闭：开启语义搜索才写 Vectorize，避免白吃额度
+  if (status === 'published' && S(c).enable_semantic === '1') {
     c.executionCtx.waitUntil(indexPost(env, postId!, title, md))
   }
 
-  // 侧栏缓存立即失效；页面 HTML 由 CDN 供给，靠 s-maxage 自然过期
-  c.executionCtx.waitUntil(env.KV.delete('side:v1'))
+  // 关键：递增缓存代数，让首页/归档/分类/文章旧 HTML 立即全部失效。
+  // 只写 1 次 D1 + 1 次 KV，与文章数量无关，发布后前台刷新即可见。
+  await db.bumpCacheGen(env)
 
   return c.redirect('/admin/posts?saved=1')
 }
@@ -557,12 +612,8 @@ app.post('/admin/post/:id/delete', guard, async (c) => {
   if (post) {
     await env.DB.prepare('DELETE FROM posts WHERE id = ?').bind(id).run()
     await env.DB.prepare('DELETE FROM post_tags WHERE post_id = ?').bind(id).run()
-    c.executionCtx.waitUntil(
-      (async () => {
-        await removeFromIndex(env, id)
-        await env.KV.delete('side:v1')
-      })()
-    )
+    if (S(c).enable_semantic === '1') c.executionCtx.waitUntil(removeFromIndex(env, id))
+    await db.bumpCacheGen(env)
   }
   return c.redirect('/admin/posts')
 })
@@ -580,13 +631,13 @@ app.post('/admin/category/new', guard, async (c) => {
   await c.env.DB.prepare('INSERT OR IGNORE INTO categories (name, slug, description) VALUES (?,?,?)')
     .bind(name, slug, String(b.description || '').slice(0, 200))
     .run()
-  await c.env.KV.delete('side:v1')
+  await db.bumpCacheGen(c.env)
   return c.redirect('/admin/categories')
 })
 
 app.post('/admin/category/:id/delete', guard, async (c) => {
   await c.env.DB.prepare('DELETE FROM categories WHERE id = ?').bind(Number(c.req.param('id'))).run()
-  await c.env.KV.delete('side:v1')
+  await db.bumpCacheGen(c.env)
   return c.redirect('/admin/categories')
 })
 
@@ -601,11 +652,13 @@ app.get('/admin/comments', guard, async (c) => {
 
 app.post('/admin/comment/:id/approve', guard, async (c) => {
   await c.env.DB.prepare("UPDATE comments SET status='approved' WHERE id=?").bind(Number(c.req.param('id'))).run()
+  await db.bumpCacheGen(c.env)
   return c.redirect('/admin/comments')
 })
 
 app.post('/admin/comment/:id/delete', guard, async (c) => {
   await c.env.DB.prepare('DELETE FROM comments WHERE id=?').bind(Number(c.req.param('id'))).run()
+  await db.bumpCacheGen(c.env)
   return c.redirect('/admin/comments')
 })
 
@@ -694,6 +747,13 @@ app.post('/admin/settings', guard, async (c) => {
     posts_per_page: String(Math.min(50, Math.max(1, Number(b.posts_per_page) || 10))),
     allow_comments: b.allow_comments === '1' ? '1' : '0',
     analytics_enabled: b.analytics_enabled === '1' ? '1' : '0',
+    // 额度开关： unchecked 一律视为关闭，避免老表单漏字段时误开功能
+    enable_page_cache: b.enable_page_cache === '1' ? '1' : '0',
+    enable_hot: b.enable_hot === '1' ? '1' : '0',
+    enable_related: b.enable_related === '1' ? '1' : '0',
+    enable_prevnext: b.enable_prevnext === '1' ? '1' : '0',
+    enable_semantic: b.enable_semantic === '1' ? '1' : '0',
+    enable_ai: b.enable_ai === '1' ? '1' : '0',
     turnstile_secret: String(b.turnstile_secret || '').slice(0, 80),
     site_logo: String(b.site_logo || '').trim().slice(0, 500),
     site_logo_height: String(Math.min(120, Math.max(24, Number(b.site_logo_height) || 36))),
@@ -713,7 +773,7 @@ app.post('/admin/settings', guard, async (c) => {
     patch.imgbed_token_hint = tokenHint(rawToken)
   }
 
-  // saveSettings 已清 settings:v1；页面 HTML 靠 CDN TTL 过期后自动更新
+  // saveSettings 已清 settings:v1 并递增 cache_gen，前台页面保存后立即生效
   await db.saveSettings(c.env, patch)
   return c.redirect('/admin/settings?saved=1')
 })
@@ -767,6 +827,8 @@ app.post('/api/preview', guard, async (c) => {
 })
 
 app.post('/api/ai/summary-tags', guard, async (c) => {
+  // AI 摘要/标签是可选消耗功能，后台关闭后直接拒绝调用
+  if (S(c).enable_ai !== '1') return c.json({ error: 'AI 功能已在后台关闭' }, 403)
   const { title, md } = (await c.req.json()) as { title?: string; md?: string }
   try {
     const [summary, tags] = await Promise.all([
