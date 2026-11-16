@@ -254,6 +254,7 @@ export function postPage(o: {
   side: SideData
 }): string {
   const p = o.post
+  const tsOff = !o.siteKey || /^(off|none|disabled)$/i.test(o.siteKey)
   const head = `<meta property="og:title" content="${esc(p.title)}">
 <meta property="og:description" content="${esc(p.excerpt || p.ai_summary)}">
 ${p.cover ? `<meta property="og:image" content="${esc(p.cover)}">` : ''}
@@ -336,7 +337,7 @@ ${p.cover ? `<meta property="og:image" content="${esc(p.cover)}">` : ''}
         <div class="field"><label>邮箱</label><input class="input" name="email" type="email" maxlength="80"></div>
       </div>
       <div class="field"><label>评论内容 *</label><textarea class="input" name="content" rows="4" required maxlength="1000"></textarea></div>
-      <div class="field"><div class="cf-turnstile" data-sitekey="${esc(o.siteKey)}" data-theme="light"></div></div>
+      ${tsOff ? '' : `<div class="field"><div class="cf-turnstile" data-sitekey="${esc(o.siteKey)}" data-theme="light"></div></div>`}
       <button class="btn primary" type="submit">提交评论</button>
     </form>`
         : ''
@@ -350,7 +351,7 @@ ${p.cover ? `<meta property="og:image" content="${esc(p.cover)}">` : ''}
     body,
     head:
       head +
-      (o.allowComment
+      (o.allowComment && !tsOff
         ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" defer></script>'
         : ''),
     sidebar: sidebarHtml(o.side)

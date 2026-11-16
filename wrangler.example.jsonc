@@ -56,8 +56,9 @@
     "SITE_NAME": "ABNcms",
     "SITE_DESCRIPTION": "A lightweight CMS on the Cloudflare free tier",
     "SITE_URL": "https://your-worker.your-subdomain.workers.dev",
-    // Cloudflare 官方测试密钥（始终通过）。启用真实验证时必须把 Site Key
-    // 与后台设置页的 Turnstile Secret 成对替换为同一 widget 的真实密钥。
+    // 人机验证三态：off / 留空 = 完全关闭（页面不加载组件、登录直接放行，
+    // 适合无法访问 challenges.cloudflare.com 的网络）；官方测试密钥 = 始终通过；
+    // 真实密钥 = 必须与后台设置页的 Turnstile Secret 成对替换，改完重新部署。
     "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
     "AI_SUMMARY_MODEL": "@cf/meta/llama-3.2-3b-instruct",
     "AI_EMBED_MODEL": "@cf/baai/bge-m3",

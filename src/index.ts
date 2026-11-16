@@ -241,7 +241,7 @@ app.get('/p/:slug', async (c) => {
     next: next || null,
     settings: s,
     allowComment: s.allow_comments === '1',
-    siteKey: env.TURNSTILE_SITE_KEY || '1x00000000000000000000AA',
+    siteKey: env.TURNSTILE_SITE_KEY || '',
     side: await side(env)
   })
 
@@ -359,7 +359,7 @@ app.get('/admin/login', async (c) => {
   const csrf = randomToken(12)
   const body = loginPage({
     settings: S(c),
-    siteKey: c.env.TURNSTILE_SITE_KEY || '1x00000000000000000000AA',
+    siteKey: c.env.TURNSTILE_SITE_KEY || '',
     csrf
   })
   return c.html(body)

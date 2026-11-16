@@ -104,6 +104,9 @@ export async function verifyTurnstile(
   // 这样即便在后台误填了「真实 Secret」而 Site Key 仍是测试值（或反之），
   // 也不会出现「测试 widget + 真实 Secret」错配把登录永久锁死的情况。
   const siteKey = env.TURNSTILE_SITE_KEY || ''
+  // 手动关闭：siteKey 设为 off / none / disabled，或干脆留空。
+  // 此时页面也不会渲染 widget（见 layout.ts / front.ts），登录直接放行。
+  if (!siteKey || /^(off|none|disabled)$/i.test(siteKey)) return true
   if (isTestKey(siteKey) || isTestKey(secret)) return true
   if (!token) return false
   try {

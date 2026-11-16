@@ -134,6 +134,7 @@ export function editor(o: {
 }): string {
   const p = o.post
   const isNew = !p
+  const tsOff = !o.siteKey || /^(off|none|disabled)$/i.test(o.siteKey)
   const body = `
 ${pageHead(isNew ? '写文章' : '编辑文章', `<a class="btn" href="/admin/posts">返回列表</a>`)}
 ${o.msg ? `<div class="alert ok">${esc(o.msg)}</div>` : ''}
@@ -203,7 +204,7 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
   </div>
 </form>
 <input type="file" id="file" accept="image/*" hidden>
-<div class="cf-turnstile" data-sitekey="${esc(o.siteKey)}" hidden></div>
+${tsOff ? '' : `<div class="cf-turnstile" data-sitekey="${esc(o.siteKey)}" hidden></div>`}
 <script type="module" src="/admin.js"></script>`
   return adminPage({
     title: isNew ? '写文章' : '编辑',
@@ -211,7 +212,7 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
     active: '/admin/post/new',
     user: o.user,
     settings: o.settings,
-    head: '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" defer></script>'
+    head: tsOff ? undefined : '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" defer></script>'
   })
 }
 
@@ -449,7 +450,7 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
 
   <div class="field"><label>Turnstile Secret Key</label>
     <input class="input" name="turnstile_secret" value="${esc(s.turnstile_secret)}">
-    <div class="small faint" style="margin-top:5px">当前使用 Cloudflare 官方测试密钥（始终通过）。启用真实人机验证需 <b>Site Key 与 Secret 成对替换</b>：Site Key 在 <code>wrangler.jsonc</code> 的 <code>TURNSTILE_SITE_KEY</code> 变量里，改完需重新部署；只填一侧会错配。</div>
+    <div class="small faint" style="margin-top:5px;line-height:1.7">三种模式：设为 <code>off</code> / 留空 = <b>完全关闭</b>（页面不加载 Turnstile 组件，登录直接放行，适合无法访问 challenges.cloudflare.com 的网络）；官方测试密钥 = 始终通过；真实密钥 = <b>Site Key 与 Secret 必须成对替换</b>。Site Key 在 <code>wrangler.jsonc</code> 的 <code>TURNSTILE_SITE_KEY</code> 变量里，改完需重新部署；只填一侧会错配。</div>
   </div>
   <button class="btn primary" type="submit">保存设置</button>
 </form>

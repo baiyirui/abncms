@@ -344,6 +344,9 @@ export function loginPage(o: {
   siteKey: string
   csrf: string
 }): string {
+  // 关闭时连外部脚本都不加载：网络无法访问 challenges.cloudflare.com 时
+  // widget 会显示「无法连接到网站」，既挡住登录也影响观感。
+  const tsOff = !o.siteKey || /^(off|none|disabled)$/i.test(o.siteKey)
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -352,7 +355,7 @@ export function loginPage(o: {
 <title>登录 · ${esc(o.settings.site_name)}</title>
 <meta name="robots" content="noindex,nofollow">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" defer></script>
+${tsOff ? '' : '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" defer></script>'}
 <style>${CSS}
 .login-box{max-width:380px;margin:11vh auto 0;padding:28px}
 .login-box h1{margin:0 0 4px;font-size:21px;font-weight:650;letter-spacing:-.02em}
@@ -374,11 +377,9 @@ export function loginPage(o: {
     <label for="p">密码</label>
     <input class="input" id="p" name="password" type="password" autocomplete="current-password" required>
   </div>
-  <div class="field">
-    <div class="cf-turnstile" data-sitekey="${esc(o.siteKey)}" data-theme="light"></div>
-  </div>
+  ${tsOff ? '' : `<div class="field"><div class="cf-turnstile" data-sitekey="${esc(o.siteKey)}" data-theme="light"></div></div>`}
   <button class="btn primary" style="width:100%;height:40px" type="submit">登录</button>
-  <div class="center small faint" style="margin-top:16px">Cloudflare Workers · D1 · Turnstile</div>
+  <div class="center small faint" style="margin-top:16px">Cloudflare Workers · D1${tsOff ? '' : ' · Turnstile'}</div>
 </form>
 </div>
 </body></html>`
