@@ -1,6 +1,6 @@
 -- ============================================================================
 --  ABNcms 示例内容：中性栏目 + 站点设置 + 两篇演示文章
---  执行：npx wrangler d1 execute abncms-db --remote --file=./seed.sql
+--  执行：npx wrangler d1 execute cf-press-db --remote --file=./seed.sql
 --  说明：全部使用 INSERT OR IGNORE，可重复执行，且不会覆盖你在后台改过的设置。
 --        格熊风格的首个 Demo 站点数据见 examples/gexiong-seed.sql。
 -- ============================================================================
