@@ -1,7 +1,7 @@
 import type { Env, PostRow, SiteSettings } from '../types'
 
 const DEFAULT_SETTINGS: SiteSettings = {
-  site_name: 'ABNcms',
+  site_name: 'ABNCMS',
   site_description: 'A lightweight CMS on the Cloudflare free tier',
   site_keywords: 'ABNcms,Cloudflare Workers,D1,CMS',
   footer_text: 'Powered by ABNcms · Cloudflare Workers + D1',

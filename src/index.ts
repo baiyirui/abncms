@@ -790,6 +790,18 @@ app.post('/admin/links/:id/delete', guard, async (c) => {
   return c.redirect('/admin/links?saved=1')
 })
 
+// 一键按当前分类生成顶部菜单（首页 + 全部分类 + 搜索）
+app.post('/admin/menu/from-categories', guard, async (c) => {
+  const cats = await db.listCategories(c.env)
+  const menu = [
+    { label: '首页', href: '/' },
+    ...cats.map((x) => ({ label: x.name, href: '/c/' + x.slug })),
+    { label: '搜索', href: '/search' }
+  ]
+  await db.saveSettings(c.env, { nav_menu: JSON.stringify(menu) })
+  return c.redirect('/admin/settings?saved=1&menu=1')
+})
+
 // ── 备份 / 恢复 ──
 app.get('/admin/backup', guard, (c) => c.html(A.backupPage({ settings: S(c), user: U(c)!, msg: c.req.query('saved') ? '导入完成' : undefined })))
 app.get('/admin/backup/export', guard, async (c) => {
@@ -890,6 +902,7 @@ app.get('/admin/settings', guard, async (c) => {
     A.settingsPage({
       settings: S(c),
       user: U(c)!,
+      msg: c.req.query('menu') === '1' ? '已按当前分类生成顶部菜单' : c.req.query('saved') ? '设置已保存' : undefined,
       err:
         c.req.query('err') === 'nokey'
           ? '未配置 CONFIG_ENCRYPTION_KEY，无法在后台写入 Token。请先设置主密钥 Secret，或改用环境变量模式。'

@@ -429,13 +429,17 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
   <div class="small muted" style="font-weight:600;margin:22px 0 12px;border-top:1px solid var(--border);padding-top:18px">导航菜单</div>
   <div class="field"><label class="row small" style="gap:7px;font-weight:500"><input type="checkbox" name="enable_links" value="1" ${s.enable_links === '1' ? 'checked' : ''}> 侧栏显示友情链接</label></div>
   <div class="field"><label>顶部导航（每行一条：显示名 | 地址；留空用默认）</label>
-    <textarea class="input" name="nav_menu" rows="5" placeholder="首页 | /\n归档 | /archive\n关于 | /page/about.html" style="font-family:ui-monospace,monospace;font-size:12px">${esc((() => { try { return (JSON.parse(s.nav_menu || '[]') as any[]).map((m) => `${m.label} | ${m.href}`).join('\n') } catch { return '' } })())}</textarea>
-    <div class="small faint" style="margin-top:5px;line-height:1.7">可填站内路径（<code>/</code>、<code>/archive</code>、<code>/page/about.html</code>）或完整外链。留空则显示默认四项导航。友情链接内容请到「友情链接」页管理。</div></div>
+    <textarea class="input" name="nav_menu" rows="6" placeholder="首页 | /\n归档 | /archive\n关于 | /page/about.html" style="font-family:ui-monospace,monospace;font-size:12px">${esc((() => { try { return (JSON.parse(s.nav_menu || '[]') as any[]).map((m) => `${m.label} | ${m.href}`).join('\n') } catch { return '' } })())}</textarea>
+    <div class="row" style="gap:8px;margin-top:8px">
+      <form method="post" action="/admin/menu/from-categories" style="display:inline"><button class="btn sm" type="submit">一键用分类生成菜单</button></form>
+      <span class="small faint">生成后仍可手动增删行</span>
+    </div>
+    <div class="small faint" style="margin-top:6px;line-height:1.7">参考格熊风格，顶部菜单建议放<b>分类导航</b>。可填站内路径（<code>/c/tech</code>、<code>/page/about.html</code>）或完整外链；留空则显示「首页 / 归档 / 标签」。搜索入口固定在右侧放大镜图标。友情链接内容请到「友情链接」页管理。</div></div>
 
   <div class="small muted" style="font-weight:600;margin:22px 0 12px;border-top:1px solid var(--border);padding-top:18px">站点 LOGO</div>
   <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
     <div id="logo-preview" style="min-width:160px;height:60px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--bg-2,#f6f7f9);border:1px dashed var(--border);border-radius:8px;padding:8px">
-      ${s.site_logo ? `<img src="${esc(s.site_logo)}" alt="LOGO" style="max-height:${esc(s.site_logo_height)}px;max-width:200px;object-fit:contain">` : `<img src="/logo-mark.svg" alt="" style="height:26px;width:26px"><b style="font-size:16px">${esc(s.site_name)}</b>`}
+      ${s.site_logo ? `<img src="${esc(s.site_logo)}" alt="LOGO" style="max-height:${esc(s.site_logo_height)}px;max-width:200px;object-fit:contain">` : `<img src="/logo.svg" alt="${esc(s.site_name)}" style="height:30px;max-width:200px;object-fit:contain">`}
     </div>
     <div style="flex:1;min-width:240px">
       <div class="field"><label>LOGO 地址（也可粘贴外链）</label><input class="input" id="site_logo" name="site_logo" value="${esc(s.site_logo)}" placeholder="https://your-image-host.example.com/file/logo.svg"></div>
@@ -444,7 +448,7 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
         <button class="btn" type="button" id="btn-logo-clear">清除</button>
         <input type="file" id="logo-file" accept="image/*" hidden>
       </div>
-      <div class="small faint" style="margin-top:8px;line-height:1.7">留空则使用<b>默认 LOGO：图标 + 站名文字</b>（站名改了会自动同步）。自定义推荐：显示高 <b>32–40px</b>，源文件 <b>2x（64–80px）</b>，宽 ≤ 200px 横版，<b>SVG 优先</b>（&lt;20KB），位图 PNG/WebP 透明底 &lt;100KB，四周留 8px 安全区。</div>
+      <div class="small faint" style="margin-top:8px;line-height:1.7">留空则使用<b>默认 LOGO：ABNCMS 橙色描边字标</b>（<code>/logo.svg</code>）。自定义推荐：显示高 <b>30–40px</b>，源文件 <b>2x（60–80px）</b>，宽 ≤ 200px 横版，<b>SVG 优先</b>（&lt;20KB），位图 PNG/WebP 透明底 &lt;100KB，四周留 8px 安全区。</div>
     </div>
   </div>
   <div class="field" style="margin-top:12px"><label>LOGO 显示高度（px，24–120）</label><input class="input" name="site_logo_height" type="number" min="24" max="120" value="${esc(s.site_logo_height)}"></div>

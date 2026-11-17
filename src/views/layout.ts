@@ -11,7 +11,7 @@ export const CSS = `
   --accent:#2563eb; --accent-soft:#eff4ff; --danger:#dc2626; --ok:#16a34a; --warn:#d97706;
   --radius:12px; --radius-sm:8px;
   --shadow:0 1px 2px rgba(16,24,40,.04),0 3px 12px rgba(16,24,40,.05);
-  --maxw:1200px;
+  --maxw:1140px;
 }
 @media (prefers-color-scheme:dark){
   :root{
@@ -40,9 +40,9 @@ img{max-width:100%;height:auto}
 
 /* ── Header：logo 左 / 导航右 ── */
 .site-header{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--border)}
-.site-header .wrap{height:60px;display:flex;align-items:center;gap:18px}
+.site-header .wrap{height:64px;display:flex;align-items:center;gap:22px}
 .brand{font-size:18px;font-weight:700;letter-spacing:-.02em;display:flex;align-items:center;gap:9px}
-.brand .mark{width:27px;height:27px;display:block;flex:none}
+.brand .mark{width:96px;height:30px;display:block;flex:none;object-fit:contain}
 .brand .dot{width:10px;height:10px;border-radius:3px;background:var(--accent);display:inline-block}
 .nav{display:flex;gap:18px;font-size:14.5px;color:var(--muted)}
 .nav a:hover,.nav a.on{color:var(--text)}
@@ -238,14 +238,15 @@ export function page(o: PageOpts): string {
   } catch {
     /* 坏 JSON 忽略 */
   }
-  const nav: [string, string][] = custom.length
-    ? custom
-    : [
-        ['/', '首页'],
-        ['/archive', '归档'],
-        ['/tags', '标签'],
-        ['/search', '搜索']
-      ]
+  // 搜索项由右侧放大镜图标单独渲染，菜单里配了就过滤掉，避免重复
+  const fallbackNav: [string, string][] = [
+    ['/', '首页'],
+    ['/archive', '归档'],
+    ['/tags', '标签']
+  ]
+  const nav: [string, string][] = (custom.length ? custom : fallbackNav).filter(
+    ([href]) => href !== '/search'
+  )
   const main = o.sidebar
     ? `<div class="layout"><div>${o.body}</div><aside class="sidebar">${o.sidebar}</aside></div>`
     : o.body
@@ -282,7 +283,7 @@ ${o.head || ''}
 </head>
 <body>
 <header class="site-header"><div class="wrap">
-  <a class="brand" href="/">${s.site_logo && /^(https?:\/\/|\/)/.test(s.site_logo) ? `<img src="${esc(s.site_logo)}" alt="${esc(s.site_name)}" style="height:${Math.min(120, Math.max(24, Number(s.site_logo_height) || 36))}px;max-width:200px;object-fit:contain">` : `<img class="mark" src="/logo-mark.svg" alt=""><span>${esc(s.site_name)}</span>`}</a>
+  <a class="brand" href="/">${s.site_logo && /^(https?:\/\/|\/)/.test(s.site_logo) ? `<img src="${esc(s.site_logo)}" alt="${esc(s.site_name)}" style="height:${Math.min(120, Math.max(24, Number(s.site_logo_height) || 36))}px;max-width:200px;object-fit:contain">` : `<img class="mark" src="/logo.svg" alt="${esc(s.site_name)}">`}</a>
   <span class="grow"></span>
   <nav class="nav">
     ${nav
@@ -291,9 +292,8 @@ ${o.head || ''}
           `<a class="${o.active === href ? 'on' : ''}" href="${href}">${esc(label)}</a>`
       )
       .join('')}
-    <a class="hide-sm" href="/admin">后台</a>
+    <a class="hide-sm" href="/search" title="搜索" aria-label="搜索" style="font-size:17px;line-height:1">⌕</a>
   </nav>
-  <a class="btn sm hide-sm" href="/search">搜索</a>
 </div></header>
 <main class="${o.wide ? '' : 'wrap'}">${main}</main>
 <footer class="site-footer"><div class="wrap">
@@ -339,7 +339,7 @@ ${o.head || ''}
 </head>
 <body>
 <header class="site-header"><div class="wrap">
-  <a class="brand" href="/">${o.settings.site_logo && /^(https?:\/\/|\/)/.test(o.settings.site_logo) ? `<img src="${esc(o.settings.site_logo)}" alt="${esc(o.settings.site_name)}" style="height:${Math.min(120, Math.max(24, Number(o.settings.site_logo_height) || 36))}px;max-width:200px;object-fit:contain">` : `<img class="mark" src="/logo-mark.svg" alt=""><span>${esc(o.settings.site_name)}</span>`}</a>
+  <a class="brand" href="/">${o.settings.site_logo && /^(https?:\/\/|\/)/.test(o.settings.site_logo) ? `<img src="${esc(o.settings.site_logo)}" alt="${esc(o.settings.site_name)}" style="height:${Math.min(120, Math.max(24, Number(o.settings.site_logo_height) || 36))}px;max-width:200px;object-fit:contain">` : `<img class="mark" src="/logo.svg" alt="${esc(o.settings.site_name)}">`}</a>
   <span class="grow"></span>
   <a class="btn sm" href="/" target="_blank">查看站点</a>
   <span class="small muted">${esc(o.user.display_name || o.user.username)}</span>

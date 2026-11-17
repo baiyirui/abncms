@@ -18,10 +18,10 @@ VALUES
 -- ── 站点设置 ───────────────────────────────────────────────────────────────
 INSERT OR IGNORE INTO settings (key, value)
 VALUES
-  ('site_name',         'ABNcms 演示站'),
-  ('site_description',  '轻量 CMS 演示站 · Cloudflare Workers + D1 + 图床，免费额度下的内容发布方案'),
+  ('site_name',         'ABNCMS'),
+  ('site_description',  'ABNCMS · Cloudflare Workers + D1 + 图床，跑在免费额度下的轻量 CMS'),
   ('site_keywords',     'ABNcms,Cloudflare Workers,D1,轻量CMS,演示站'),
-  ('footer_text',       'Powered by ABNcms · Cloudflare Workers + D1 · 演示站'),
+  ('footer_text',       'Powered by ABNCMS · Cloudflare Workers + D1'),
   ('posts_per_page',    '10'),
   ('allow_comments',    '1'),
   ('analytics_enabled', '1'),
