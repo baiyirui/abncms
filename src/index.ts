@@ -76,11 +76,12 @@ function html(c: any, body: string, _cacheSeconds = 0) {
 const NO_CACHE = '<!--abncms:nocache-->'
 
 /**
- * 页面级 KV 缓存（带代数）：
+ * 页面级边缘缓存（Cloudflare Cache API，**不占 KV 额度**）：
  *  - 只有匿名访客且开启 enable_page_cache 时才读/写；
- *  - key 含 cache_gen，发布时代数 +1，旧 key 自然失效，无需逐条删除；
- *  - 命中直接返回 HTML，0 次 D1 查询；未命中才渲染并写 1 次 KV。
- * TTL 用 7 天兜底（页数不多，且发布会主动失效），KV 写只在首次访问发生时。
+ *  - key = 完整 URL（含 ?page= 分页参数）+ cache_gen，发布时代数 +1，
+ *    旧缓存自动不再命中，7 天后由 TTL 清理，完全不需要 purge；
+ *  - 命中 0 次 D1、0 次 KV 写、0 次 KV 读（设置由中间件读一次）；
+ *  - 未命中才渲染并写边缘缓存，KV 免费额度 1,000 写/天完全留给会话等真正需要的地方。
  */
 async function cachedPage(
   c: any,
@@ -88,14 +89,36 @@ async function cachedPage(
   render: () => Promise<string>,
   ttl = 604800
 ): Promise<Response> {
-  if (!U(c) && s.enable_page_cache !== '0') {
-    const key = `page:g${s.cache_gen || '1'}:${c.req.path}`
-    const hit = await c.env.KV.get(key)
-    if (hit) return html(c, hit)
+  const canCache = !U(c) && s.enable_page_cache !== '0'
+  if (canCache) {
+    const url = new URL(c.req.url)
+    url.searchParams.set('__abn_g', s.cache_gen || '1')
+    const key = new Request(url.toString(), { method: 'GET' })
+    const cache = caches.default
+    try {
+      const hit = await cache.match(key)
+      // 缓存里存的是公开缓存响应；返回给浏览器时改回 no-store，
+      // 保证用户硬刷新就能拿到新版本，不被浏览器自己缓存住。
+      if (hit) {
+        const res = html(c, await hit.text())
+        res.headers.set('x-abn-cache', 'HIT')
+        return res
+      }
+    } catch {
+      /* Cache API 不可用时降级为实时渲染，不影响可用性 */
+    }
     const body = await render()
     if (body.startsWith(NO_CACHE)) return html(c, body.slice(NO_CACHE.length))
-    c.executionCtx.waitUntil(c.env.KV.put(key, body, { expirationTtl: ttl }))
-    return html(c, body)
+    const cacheable = new Response(body, {
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': `public, max-age=${ttl}`
+      }
+    })
+    c.executionCtx.waitUntil(cache.put(key, cacheable).catch(() => undefined))
+    const res = html(c, body)
+    res.headers.set('x-abn-cache', 'MISS')
+    return res
   }
   const body = await render()
   return html(c, body.startsWith(NO_CACHE) ? body.slice(NO_CACHE.length) : body)
@@ -122,8 +145,9 @@ async function side(env: Env, s?: SiteSettings): Promise<import('./views/front')
     cats: (cats || []).map((c: any) => ({ name: c.name, slug: c.slug, post_count: c.post_count })),
     tags: (tags || []).slice(0, 18).map((t: any) => ({ name: t.name, slug: t.slug, post_count: t.post_count }))
   }
-  // 侧栏低频写：TTL 30 分钟，避免 KV 免费额度 1,000 写/天被高频回源打满
-  await env.KV.put('side:v1', JSON.stringify(data), { expirationTtl: 1800 })
+  // 侧栏低频写：TTL 6 小时（发布/分类/评论变更都会主动删除），
+  // 从 48 次写/天降到 4 次/天，给 KV 免费额度留出余量
+  await env.KV.put('side:v1', JSON.stringify(data), { expirationTtl: 21600 })
   return data
 }
 
@@ -558,7 +582,8 @@ const savePost = async (c: any, id: number | null) => {
   const slug = String(b.slug || '').trim() || slugify(title, 'post-' + Date.now())
   const excerpt = String(b.excerpt || '').trim() || plainExcerpt(md)
   const cover = String(b.cover || '').trim() || firstImage(md)
-  const status = b.status === 'published' ? 'published' : 'draft'
+  // 默认正式发布：只有显式选「草稿」才隐藏，避免漏传字段导致文章前台不可见
+  const status = b.status === 'draft' ? 'draft' : 'published'
   const categoryId = b.category_id ? Number(b.category_id) : null
   const pinned = b.pinned ? 1 : 0
   const now = nowSql()
@@ -929,10 +954,9 @@ async function scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext
         await env.DB.prepare("DELETE FROM page_views WHERE created_at < datetime('now','-30 day')").run()
         // 2. 清理 90 天前的垃圾评论
         await env.DB.prepare("DELETE FROM comments WHERE status='spam' AND created_at < datetime('now','-90 day')").run()
-        // 3. 刷新设置与侧栏缓存（页面 HTML 交给 CDN，按 s-maxage 自然过期）
-        await env.KV.delete('settings:v1')
-        await env.KV.delete('side:v1')
-        // 4. 记录一条心跳，便于在后台确认 Cron 正常
+        // 3. 不再每天主动删设置/侧栏缓存：它们有 6 小时 TTL，
+        //    且发布与后台保存时会即时失效，Cron 里多删只是白花 KV 写额度。
+        // 4. 记录一条心跳，便于在后台确认 Cron 正常（1 次写/天）
         await env.KV.put('cron:last', new Date().toISOString())
       } catch {
         /* Cron 失败不影响站点 */

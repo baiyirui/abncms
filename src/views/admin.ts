@@ -191,9 +191,10 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
     </div>
     <div class="field"><label>状态</label>
       <select class="input" name="status">
-        <option value="published" ${p?.status === 'published' ? 'selected' : ''}>已发布</option>
-        <option value="draft" ${p?.status !== 'published' ? 'selected' : ''}>草稿</option>
+        <option value="published" ${isNew || p?.status === 'published' ? 'selected' : ''}>正式发布（默认）</option>
+        <option value="draft" ${!isNew && p?.status !== 'published' ? 'selected' : ''}>草稿（前台不可见）</option>
       </select>
+      <div class="small faint" style="margin-top:5px;line-height:1.6">新建文章默认正式发布，保存后首页立即可见；只有主动选「草稿」才藏起来。</div>
     </div>
   </div>
   <div class="row">

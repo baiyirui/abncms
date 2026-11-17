@@ -26,8 +26,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
 }
 
 /** 站点设置：优先 KV 缓存，回源 D1。
- *  TTL 设为 1 小时而非 60 秒：KV 免费额度只有 1,000 次写/天，
- *  60 秒回源会产生最多 1,440 次写直接超额。保存设置时主动失效缓存。 */
+ *  TTL 设为 6 小时：KV 免费额度只有 1,000 次写/天，1 小时会稳定产生 24 次写；
+ *  6 小时降到 4 次/天，且保存设置/发布文章时会主动删除缓存，不存在陈旧问题。 */
 export async function getSettings(env: Env): Promise<SiteSettings> {
   const cacheKey = 'settings:v1'
   const cached = await env.KV.get(cacheKey, 'json')
@@ -39,7 +39,7 @@ export async function getSettings(env: Env): Promise<SiteSettings> {
     }>()
     const map: Record<string, string> = {}
     for (const r of results || []) map[r.key] = r.value
-    await env.KV.put(cacheKey, JSON.stringify(map), { expirationTtl: 3600 })
+    await env.KV.put(cacheKey, JSON.stringify(map), { expirationTtl: 21600 })
     return { ...DEFAULT_SETTINGS, ...map }
   } catch {
     return { ...DEFAULT_SETTINGS }
@@ -253,7 +253,6 @@ export async function addComment(env: Env, c: {
   )
     .bind(c.post_id, c.author, c.email, c.website, c.content, c.status)
     .run()
-  await env.KV.delete('recent_comments:v1')
 }
 
 // ── 统计 ────────────────────────────────────────────────────────────────────
