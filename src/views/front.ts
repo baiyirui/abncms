@@ -7,11 +7,12 @@ interface TagLite {
   slug: string
 }
 
-/** 边栏数据（热门文章 / 分类目录 / 热门标签） */
+/** 边栏数据（热门文章 / 分类目录 / 热门标签 / 友情链接） */
 export interface SideData {
   hot: { id: number; slug: string; title: string; views: number }[]
   cats: { name: string; slug: string; post_count?: number }[]
   tags: { name: string; slug: string; post_count?: number }[]
+  links?: { name: string; url: string; description?: string }[]
 }
 
 /** 分页器 */
@@ -61,7 +62,18 @@ export function sidebarHtml(s: SideData): string {
         .map((t) => `<a class="tag" href="/t/${esc(t.slug)}">#${esc(t.name)}</a>`)
         .join('')
     : '<span class="small faint">暂无标签</span>'}
-</div></div>`
+</div></div>${
+  s.links?.length
+    ? `<div class="widget"><h3>友情链接</h3>
+  ${s.links
+    .map(
+      (l) =>
+        `<div class="w-post"><a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.name)}</a>${l.description ? `<span class="v">${esc(l.description)}</span>` : ''}</div>`
+    )
+    .join('')}
+</div>`
+    : ''
+}`
 }
 
 /** 列表式文章条目：标题 + 摘要 + meta（作者/日期/阅读量），有封面时左侧缩略图 */
@@ -90,14 +102,16 @@ export function home(o: {
   settings: SiteSettings
   side: SideData
 }): string {
-  // 顶部横幅：优先取置顶且带封面的文章，否则取任意带封面文章
-  const bannerPost = o.posts.find((p) => p.pinned && p.cover) || o.posts.find((p) => p.cover)
-  const banner = bannerPost
-    ? `<a class="banner" href="/p/${esc(bannerPost.slug)}.html">
-  <img src="${esc(bannerPost.cover)}" alt="${esc(bannerPost.title)}">
-  <span class="cap">${esc(bannerPost.title)}</span>
+  // 顶部横幅始终显示：有封面文章用其封面，否则用内置 banner.svg 兜底，
+  // 文案显示置顶文章标题（或站点名 + 描述），让首页第一眼就有视觉焦点。
+  const bannerPost = o.posts.find((p) => p.pinned) || o.posts[0]
+  const bannerImg = bannerPost?.cover || '/banner.svg'
+  const bannerText = bannerPost ? bannerPost.title : o.settings.site_name
+  const bannerSub = bannerPost ? '' : o.settings.site_description
+  const banner = `<a class="banner" href="${bannerPost ? '/p/' + esc(bannerPost.slug) + '.html' : '/'}">
+  <img src="${esc(bannerImg)}" alt="${esc(bannerText)}">
+  <span class="cap">${esc(bannerText)}${bannerSub ? `<small>${esc(bannerSub)}</small>` : ''}</span>
 </a>`
-    : `<section class="hero"><h1>${esc(o.settings.site_name)}</h1><p>${esc(o.settings.site_description)}</p></section>`
   const body = `
 ${banner}
 <div class="post-list">
@@ -354,6 +368,25 @@ ${p.cover ? `<meta property="og:image" content="${esc(p.cover)}">` : ''}
       (o.allowComment && !tsOff
         ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" defer></script>'
         : ''),
+    sidebar: sidebarHtml(o.side)
+  })
+}
+
+/** 独立页面（关于 / 联系等），与文章页共用外壳但不显示评论与上下篇 */
+export function pageView(o: {
+  page: { slug: string; title: string; content_html: string; updated_at?: string }
+  settings: SiteSettings
+  side: SideData
+  head?: string
+}): string {
+  return page({
+    title: o.page.title,
+    settings: o.settings,
+    body: `<article class="card pad">
+  <h1 style="font-size:26px;line-height:1.35;margin:0 0 6px;letter-spacing:-.02em">${esc(o.page.title)}</h1>
+  <div class="prose">${o.page.content_html}</div>
+</article>`,
+    head: o.head,
     sidebar: sidebarHtml(o.side)
   })
 }

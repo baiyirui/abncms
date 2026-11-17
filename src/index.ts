@@ -124,26 +124,57 @@ async function cachedPage(
   return html(c, body.startsWith(NO_CACHE) ? body.slice(NO_CACHE.length) : body)
 }
 
+/**
+ * XML 缓存（RSS / Sitemap）：与页面共用 cache_gen 代数，
+ * 命中直接返回，不查 D1；发布、改文、改设置时随代数一起失效。
+ * 爬虫高频抓取这两处时，不再每次扫描整张 posts 表。
+ */
+async function cachedXml(c: any, s: SiteSettings, contentType: string, render: () => Promise<string>): Promise<Response> {
+  const url = new URL(c.req.url)
+  url.searchParams.set('__abn_g', s.cache_gen || '1')
+  const key = new Request(url.toString(), { method: 'GET' })
+  const cache = caches.default
+  try {
+    const hit = await cache.match(key)
+    if (hit) {
+      const body = await hit.text()
+      return c.body(body, { headers: { 'content-type': contentType, 'cache-control': 'public, max-age=300' } })
+    }
+  } catch {
+    /* 缓存不可用时降级实时渲染 */
+  }
+  const xml = await render()
+  const cacheable = new Response(xml, {
+    headers: { 'content-type': contentType, 'cache-control': 'public, max-age=86400' }
+  })
+  c.executionCtx.waitUntil(cache.put(key, cacheable).catch(() => undefined))
+  return c.body(xml, { headers: { 'content-type': contentType, 'cache-control': 'public, max-age=300' } })
+}
+
 /** 边栏数据：热门文章 / 分类目录 / 热门标签（KV 缓存 30 分钟） */
 async function side(env: Env, s?: SiteSettings): Promise<import('./views/front').SideData> {
-  const empty: import('./views/front').SideData = { hot: [], cats: [], tags: [] }
   const hit = await env.KV.get('side:v1', 'json')
   if (hit) return hit as import('./views/front').SideData
   // 关掉热门文章后，热门那条 D1 查询直接不执行
   const wantHot = !s || s.enable_hot !== '0'
-  const [hotRes, cats, tags] = await Promise.all([
+  const wantLinks = !s || s.enable_links === '1'
+  const [hotRes, cats, tags, linksRes] = await Promise.all([
     wantHot
       ? env.DB.prepare(
           "SELECT id, slug, title, views FROM posts WHERE status = 'published' ORDER BY views DESC LIMIT 8"
         ).all<any>()
       : Promise.resolve({ results: [] as any[] }),
     db.listCategories(env),
-    db.listTags(env)
+    db.listTags(env),
+    wantLinks
+      ? env.DB.prepare('SELECT name, url, description FROM links WHERE enabled=1 ORDER BY sort_order,id LIMIT 12').all<any>()
+      : Promise.resolve({ results: [] as any[] })
   ])
   const data = {
     hot: hotRes.results || [],
     cats: (cats || []).map((c: any) => ({ name: c.name, slug: c.slug, post_count: c.post_count })),
-    tags: (tags || []).slice(0, 18).map((t: any) => ({ name: t.name, slug: t.slug, post_count: t.post_count }))
+    tags: (tags || []).slice(0, 18).map((t: any) => ({ name: t.name, slug: t.slug, post_count: t.post_count })),
+    links: (linksRes.results || []).map((l: any) => ({ name: l.name, url: l.url, description: l.description || '' }))
   }
   // 侧栏低频写：TTL 6 小时（发布/分类/评论变更都会主动删除），
   // 从 48 次写/天降到 4 次/天，给 KV 免费额度留出余量
@@ -310,6 +341,23 @@ const articleRoute = async (c: any) => {
 }
 app.get('/p/:slug', articleRoute)
 
+/** 独立页面：/page/{slug}.html，老地址 301 兼容 */
+const pageRoute = async (c: any) => {
+  const env: Env = c.env
+  const s = S(c)
+  const raw = c.req.param('slug')
+  if (!raw.endsWith('.html')) return c.redirect('/page/' + raw + '.html', 301)
+  const slug = raw.slice(0, -5)
+  return cachedPage(c, s, async () => {
+    const p = await env.DB.prepare('SELECT * FROM pages WHERE slug=?').bind(slug).first<any>()
+    if (!p) return NO_CACHE + V.notFound(s, await side(env, s), '页面不存在')
+    if (p.status !== 'published' && !U(c))
+      return NO_CACHE + V.notFound(s, await side(env, s), '页面不存在')
+    return V.pageView({ page: p, settings: s, side: await side(env, s) })
+  })
+}
+app.get('/page/:slug', pageRoute)
+
 // ── 评论提交 ──
 app.post('/comment', async (c) => {
   const env = c.env
@@ -344,6 +392,7 @@ app.post('/comment', async (c) => {
 app.get('/feed.xml', async (c) => {
   const env = c.env
   const s = S(c)
+  return cachedXml(c, s, 'application/rss+xml; charset=utf-8', async () => {
   const posts = await db.listPosts(env, { status: 'published', limit: 30, offset: 0 })
   const base = (env.SITE_URL || new URL(c.req.url).origin).replace(/\/$/, '')
   const items = posts
@@ -365,12 +414,15 @@ app.get('/feed.xml', async (c) => {
   <language>zh-CN</language>
   ${items}
 </channel></rss>`
-  return c.body(xml, { headers: { 'content-type': 'application/rss+xml; charset=utf-8', 'cache-control': 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400' } })
+  return xml
+  })
 })
 
 // ── Sitemap ──
 app.get('/sitemap.xml', async (c) => {
   const env = c.env
+  const s = S(c)
+  return cachedXml(c, s, 'application/xml; charset=utf-8', async () => {
   const [posts, cats, tags] = await Promise.all([
     db.listPosts(env, { status: 'published', limit: 1000, offset: 0 }),
     db.listCategories(env),
@@ -388,7 +440,8 @@ app.get('/sitemap.xml', async (c) => {
   ${tags.map((x) => url('/t/' + x.slug, '0.4')).join('\n  ')}
   ${posts.map((p) => url('/p/' + p.slug + '.html', '0.8')).join('\n  ')}
 </urlset>`
-  return c.body(xml, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=600, s-maxage=21600, stale-while-revalidate=86400' } })
+  return xml
+  })
 })
 
 // ── R2 媒体文件（兼容历史 R2 记录；新上传走图床外链） ──
@@ -666,6 +719,106 @@ app.post('/admin/category/:id/delete', guard, async (c) => {
   return c.redirect('/admin/categories')
 })
 
+// ── 独立页面 ──
+app.get('/admin/pages', guard, async (c) => {
+  const { results } = await c.env.DB.prepare('SELECT * FROM pages ORDER BY sort_order,id').all<any>()
+  return c.html(A.pagesPage({ pages: results || [], settings: S(c), user: U(c)!, msg: c.req.query('saved') ? '已保存' : undefined }))
+})
+app.get('/admin/page/new', guard, (c) => c.html(A.pageEditor({ page: null, settings: S(c), user: U(c)! })))
+app.get('/admin/page/:id', guard, async (c) => {
+  const p = await c.env.DB.prepare('SELECT * FROM pages WHERE id=?').bind(Number(c.req.param('id'))).first<any>()
+  if (!p) return c.redirect('/admin/pages')
+  return c.html(A.pageEditor({ page: p, settings: S(c), user: U(c)! }))
+})
+const savePage = async (c: any, id: number | null) => {
+  if (!sameOrigin(c)) return c.text('跨站请求被拒绝', 403)
+  const b = (await c.req.parseBody()) as Record<string, string>
+  const title = String(b.title || '').trim()
+  if (!title) return c.redirect('/admin/pages?err=title')
+  const rawSlug = String(b.slug || '').trim() || slugify(title, 'page-' + Date.now())
+  const slug = rawSlug.replace(/\.html$/i, '')
+  const md = String(b.content_md || '')
+  const status = b.status === 'draft' ? 'draft' : 'published'
+  const sort = Number(b.sort_order) || 0
+  if (id) {
+    await c.env.DB.prepare('UPDATE pages SET slug=?,title=?,content_md=?,content_html=?,status=?,sort_order=?,updated_at=? WHERE id=?')
+      .bind(slug, title, md, renderMarkdown(md), status, sort, nowSql(), id).run()
+  } else {
+    await c.env.DB.prepare('INSERT INTO pages (slug,title,content_md,content_html,status,sort_order) VALUES (?,?,?,?,?,?)')
+      .bind(slug, title, md, renderMarkdown(md), status, sort).run()
+  }
+  await db.bumpCacheGen(c.env)
+  return c.redirect('/admin/pages?saved=1')
+}
+app.post('/admin/page/new', guard, (c) => savePage(c, null))
+app.post('/admin/page/:id', guard, (c) => savePage(c, Number(c.req.param('id'))))
+app.post('/admin/page/:id/delete', guard, async (c) => {
+  await c.env.DB.prepare('DELETE FROM pages WHERE id=?').bind(Number(c.req.param('id'))).run()
+  await db.bumpCacheGen(c.env)
+  return c.redirect('/admin/pages')
+})
+
+// ── 友情链接 ──
+app.get('/admin/links', guard, async (c) => {
+  const { results } = await c.env.DB.prepare('SELECT * FROM links ORDER BY sort_order,id').all<any>()
+  return c.html(A.linksPage({ links: results || [], settings: S(c), user: U(c)!, msg: c.req.query('saved') ? '已保存' : undefined }))
+})
+app.post('/admin/links/settings', guard, async (c) => {
+  const b = (await c.req.parseBody()) as Record<string, string>
+  await db.saveSettings(c.env, { enable_links: b.enable_links === '1' ? '1' : '0' })
+  return c.redirect('/admin/links?saved=1')
+})
+app.post('/admin/links/new', guard, async (c) => {
+  const b = (await c.req.parseBody()) as Record<string, string>
+  const name = String(b.name || '').trim()
+  const url = String(b.url || '').trim()
+  if (!name || !/^https?:\/\//.test(url)) return c.redirect('/admin/links')
+  await c.env.DB.prepare('INSERT INTO links (name,url,description,sort_order) VALUES (?,?,?,?)')
+    .bind(name.slice(0, 60), url.slice(0, 300), String(b.description || '').slice(0, 120), Number(b.sort_order) || 0).run()
+  await db.bumpCacheGen(c.env)
+  return c.redirect('/admin/links?saved=1')
+})
+app.post('/admin/links/:id/toggle', guard, async (c) => {
+  await c.env.DB.prepare('UPDATE links SET enabled = CASE WHEN enabled=1 THEN 0 ELSE 1 END WHERE id=?')
+    .bind(Number(c.req.param('id'))).run()
+  await db.bumpCacheGen(c.env)
+  return c.redirect('/admin/links?saved=1')
+})
+app.post('/admin/links/:id/delete', guard, async (c) => {
+  await c.env.DB.prepare('DELETE FROM links WHERE id=?').bind(Number(c.req.param('id'))).run()
+  await db.bumpCacheGen(c.env)
+  return c.redirect('/admin/links?saved=1')
+})
+
+// ── 备份 / 恢复 ──
+app.get('/admin/backup', guard, (c) => c.html(A.backupPage({ settings: S(c), user: U(c)!, msg: c.req.query('saved') ? '导入完成' : undefined })))
+app.get('/admin/backup/export', guard, async (c) => {
+  const data = await db.exportAll(c.env)
+  const name = `abncms-backup-${new Date().toISOString().slice(0, 10)}.json`
+  return c.body(JSON.stringify(data, null, 2), {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'content-disposition': `attachment; filename="${name}"`,
+      'cache-control': 'no-store'
+    }
+  })
+})
+app.post('/admin/backup/import', guard, async (c) => {
+  if (!sameOrigin(c)) return c.text('跨站请求被拒绝', 403)
+  try {
+    const form = await c.req.formData()
+    const file = form.get('file') as File | null
+    if (!file || typeof file === 'string') throw new Error('没有选择文件')
+    if (file.size > 10 * 1024 * 1024) throw new Error('备份文件不能超过 10MB')
+    const payload = JSON.parse(await file.text())
+    const stats = await db.importAll(c.env, payload)
+    await db.bumpCacheGen(c.env)
+    return c.html(A.backupPage({ settings: S(c), user: U(c)!, stats }))
+  } catch (e: any) {
+    return c.html(A.backupPage({ settings: S(c), user: U(c)!, err: '导入失败：' + (e?.message || '未知错误') }), 400)
+  }
+})
+
 // ── 评论 ──
 app.get('/admin/comments', guard, async (c) => {
   const { results } = await c.env.DB.prepare(
@@ -781,6 +934,7 @@ app.post('/admin/settings', guard, async (c) => {
     enable_prevnext: b.enable_prevnext === '1' ? '1' : '0',
     enable_semantic: b.enable_semantic === '1' ? '1' : '0',
     enable_ai: b.enable_ai === '1' ? '1' : '0',
+    enable_links: b.enable_links === '1' ? '1' : '0',
     turnstile_secret: String(b.turnstile_secret || '').slice(0, 80),
     site_logo: String(b.site_logo || '').trim().slice(0, 500),
     site_logo_height: String(Math.min(120, Math.max(24, Number(b.site_logo_height) || 36))),
@@ -788,6 +942,15 @@ app.post('/admin/settings', guard, async (c) => {
     imgbed_token_name: String(b.imgbed_token_name || '').trim().slice(0, 60),
     imgbed_channel: ['s3', 'huggingface'].includes(channel) ? channel : ''
   }
+
+  // 导航菜单：「显示名 | 地址」逐行解析为 JSON，忽略空行与无分隔符的行
+  const menuLines = String(b.nav_menu || '').split(/\r?\n/)
+  const menu = menuLines
+    .map((line) => line.split('|').map((x) => x.trim()))
+    .filter((parts) => parts.length >= 2 && parts[0] && parts[1])
+    .slice(0, 12)
+    .map(([label, href]) => ({ label: label.slice(0, 20), href: href.slice(0, 200) }))
+  patch.nav_menu = JSON.stringify(menu)
 
   // Token 留空 = 不修改；勾「清除」则回到环境变量模式；填写则加密落库。
   const rawToken = String(b.imgbed_token || '').trim()

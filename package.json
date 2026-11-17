@@ -1,6 +1,6 @@
 {
   "name": "abncms",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "type": "module",
   "description": "ABNcms — a lightweight open-source CMS for Cloudflare Workers + D1 + external image host, designed to run entirely on the free tier",

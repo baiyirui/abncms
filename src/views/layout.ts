@@ -68,6 +68,7 @@ img{max-width:100%;height:auto}
 .banner{display:block;position:relative;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:20px}
 .banner img{width:100%;aspect-ratio:21/8;object-fit:cover;display:block}
 .banner .cap{position:absolute;left:0;right:0;bottom:0;padding:38px 18px 13px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.58));color:#fff;font-size:16.5px;font-weight:620;letter-spacing:-.01em}
+.banner .cap small{display:block;font-size:13px;font-weight:400;opacity:.88;margin-top:3px}
 @media(max-width:720px){.banner img{aspect-ratio:16/9}}
 
 /* ── 卡片 / 按钮 ── */
@@ -225,12 +226,26 @@ export interface PageOpts {
 /** 前台页面外壳：logo 左 / 导航右，可选两栏布局与边栏 */
 export function page(o: PageOpts): string {
   const s = o.settings
-  const nav = [
-    ['/', '首页'],
-    ['/archive', '归档'],
-    ['/tags', '标签'],
-    ['/search', '搜索']
-  ]
+  // 自定义菜单来自后台设置（JSON）；解析失败自动回退默认，避免坏数据搞挂全站
+  let custom: [string, string][] = []
+  try {
+    const parsed = JSON.parse(s.nav_menu || '[]')
+    if (Array.isArray(parsed)) {
+      custom = parsed
+        .filter((m: any) => m && typeof m.href === 'string' && typeof m.label === 'string')
+        .map((m: any) => [m.href, m.label] as [string, string])
+    }
+  } catch {
+    /* 坏 JSON 忽略 */
+  }
+  const nav: [string, string][] = custom.length
+    ? custom
+    : [
+        ['/', '首页'],
+        ['/archive', '归档'],
+        ['/tags', '标签'],
+        ['/search', '搜索']
+      ]
   const main = o.sidebar
     ? `<div class="layout"><div>${o.body}</div><aside class="sidebar">${o.sidebar}</aside></div>`
     : o.body
@@ -304,8 +319,11 @@ export function adminPage(o: {
     ['/admin/posts', '文章'],
     ['/admin/post/new', '写文章'],
     ['/admin/categories', '分类'],
+    ['/admin/pages', '独立页面'],
+    ['/admin/links', '友情链接'],
     ['/admin/comments', '评论'],
     ['/admin/media', '媒体库'],
+    ['/admin/backup', '备份'],
     ['/admin/settings', '设置']
   ]
   return `<!doctype html>

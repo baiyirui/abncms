@@ -426,6 +426,12 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
   </div>
   <div class="small faint" style="margin-top:8px;line-height:1.7">小站长建议：只开「页面缓存 + 热门文章」，其余全关。评论关闭后前台不查评论、不加载验证组件；语义搜索与 AI 默认关闭，开启前请确认配额。</div>
 
+  <div class="small muted" style="font-weight:600;margin:22px 0 12px;border-top:1px solid var(--border);padding-top:18px">导航菜单</div>
+  <div class="field"><label class="row small" style="gap:7px;font-weight:500"><input type="checkbox" name="enable_links" value="1" ${s.enable_links === '1' ? 'checked' : ''}> 侧栏显示友情链接</label></div>
+  <div class="field"><label>顶部导航（每行一条：显示名 | 地址；留空用默认）</label>
+    <textarea class="input" name="nav_menu" rows="5" placeholder="首页 | /\n归档 | /archive\n关于 | /page/about.html" style="font-family:ui-monospace,monospace;font-size:12px">${esc((() => { try { return (JSON.parse(s.nav_menu || '[]') as any[]).map((m) => `${m.label} | ${m.href}`).join('\n') } catch { return '' } })())}</textarea>
+    <div class="small faint" style="margin-top:5px;line-height:1.7">可填站内路径（<code>/</code>、<code>/archive</code>、<code>/page/about.html</code>）或完整外链。留空则显示默认四项导航。友情链接内容请到「友情链接」页管理。</div></div>
+
   <div class="small muted" style="font-weight:600;margin:22px 0 12px;border-top:1px solid var(--border);padding-top:18px">站点 LOGO</div>
   <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
     <div id="logo-preview" style="min-width:160px;height:60px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--bg-2,#f6f7f9);border:1px dashed var(--border);border-radius:8px;padding:8px">
@@ -496,4 +502,148 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
 </div>
 <script type="module" src="/admin.js"></script>`
   return adminPage({ title: '设置', body, active: '/admin/settings', user: o.user, settings: o.settings })
+}
+
+/** 独立页面管理 */
+export function pagesPage(o: {
+  pages: any[]
+  settings: SiteSettings
+  user: { username: string; display_name: string }
+  msg?: string
+  err?: string
+}): string {
+  const body = `
+${pageHead('独立页面', '<a class="btn primary" href="/admin/page/new">新建页面</a>')}
+${o.msg ? `<div class="alert ok">${esc(o.msg)}</div>` : ''}
+${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
+<div class="card" style="overflow:hidden"><table class="tbl">
+  <thead><tr><th>标题</th><th>路径</th><th>状态</th><th>排序</th><th style="text-align:right">操作</th></tr></thead>
+  <tbody>${o.pages.length
+    ? o.pages
+        .map(
+          (p) => `<tr>
+    <td><a href="/page/${esc(p.slug)}.html" target="_blank">${esc(p.title)}</a></td>
+    <td class="small muted">/page/${esc(p.slug)}.html</td>
+    <td><span class="badge ${p.status === 'published' ? 'pub' : 'draft'}">${p.status === 'published' ? '已发布' : '草稿'}</span></td>
+    <td class="small">${esc(p.sort_order ?? 0)}</td>
+    <td style="text-align:right"><a class="btn sm" href="/admin/page/${p.id}">编辑</a>
+      <form method="post" action="/admin/page/${p.id}/delete" style="display:inline" onsubmit="return confirm('确定删除这个页面？')"><button class="btn sm danger">删除</button></form></td>
+  </tr>`
+        )
+        .join('')
+    : '<tr><td colspan="5" class="center faint small">还没有独立页面</td></tr>'}</tbody>
+</table></div>
+<div class="card pad" style="margin-top:20px">
+  <div class="small muted" style="font-weight:600;margin-bottom:8px">用途</div>
+  <div class="small faint" style="line-height:1.8">独立页面适合放「关于我们」「联系方式」「隐私政策」这类不随文章流变动的内容。建好后到「导航菜单」里把它加到前台顶部导航。</div>
+</div>`
+  return adminPage({ title: '独立页面', body, active: '/admin/pages', user: o.user, settings: o.settings })
+}
+
+export function pageEditor(o: {
+  page: any | null
+  settings: SiteSettings
+  user: { username: string; display_name: string }
+  err?: string
+}): string {
+  const p = o.page
+  const isNew = !p
+  const body = `
+${pageHead(isNew ? '新建页面' : '编辑页面')}
+${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
+<form class="card pad" method="post" action="${isNew ? '/admin/page/new' : '/admin/page/' + p.id}">
+  <div class="field"><label>标题</label><input class="input" name="title" value="${esc(p?.title || '')}" required></div>
+  <div class="field"><label>路径 slug（英文/短横线，留空自动生成）</label><input class="input" name="slug" value="${esc(p?.slug || '')}" placeholder="about"></div>
+  <div class="field"><label>正文（Markdown）</label><textarea class="input" id="md" name="content_md" rows="16" style="font-family:ui-monospace,monospace;font-size:13px">${esc(p?.content_md || '')}</textarea></div>
+  <div class="grid2">
+    <div class="field"><label>状态</label><select class="input" name="status">
+      <option value="published" ${isNew || p?.status === 'published' ? 'selected' : ''}>正式发布（默认）</option>
+      <option value="draft" ${!isNew && p?.status !== 'published' ? 'selected' : ''}>草稿</option>
+    </select></div>
+    <div class="field"><label>排序（小的在前）</label><input class="input" name="sort_order" type="number" value="${esc(p?.sort_order ?? 0)}"></div>
+  </div>
+  <button class="btn primary" type="submit">${isNew ? '创建页面' : '保存修改'}</button>
+</form>
+<script type="module" src="/admin.js"></script>`
+  return adminPage({ title: isNew ? '新建页面' : '编辑页面', body, active: '/admin/pages', user: o.user, settings: o.settings })
+}
+
+/** 友情链接管理 */
+export function linksPage(o: {
+  links: any[]
+  settings: SiteSettings
+  user: { username: string; display_name: string }
+  msg?: string
+  err?: string
+}): string {
+  const enabled = o.settings.enable_links === '1'
+  const body = `
+${pageHead('友情链接')}
+${o.msg ? `<div class="alert ok">${esc(o.msg)}</div>` : ''}
+${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
+<div class="card pad" style="margin-bottom:20px">
+  <form method="post" action="/admin/links/settings" class="row" style="gap:10px;flex-wrap:wrap">
+    <label class="row small" style="gap:7px;font-weight:500"><input type="checkbox" name="enable_links" value="1" ${enabled ? 'checked' : ''}> 前台侧栏显示友情链接</label>
+    <span class="grow"></span><button class="btn" type="submit">保存开关</button>
+  </form>
+  <div class="small faint" style="margin-top:8px">关闭后侧栏不查 links 表，零额外消耗。开关状态保存后立即生效。</div>
+</div>
+<form class="card pad" method="post" action="/admin/links/new" style="margin-bottom:20px">
+  <div class="small muted" style="font-weight:600;margin-bottom:12px">添加友链</div>
+  <div class="grid2">
+    <div class="field"><label>站点名称</label><input class="input" name="name" required placeholder="示例站点"></div>
+    <div class="field"><label>网址</label><input class="input" name="url" type="url" required placeholder="https://example.com"></div>
+  </div>
+  <div class="field"><label>描述（可选）</label><input class="input" name="description" placeholder="一句话介绍"></div>
+  <div class="row"><div class="field" style="max-width:160px"><label>排序</label><input class="input" name="sort_order" type="number" value="0"></div><span class="grow"></span><button class="btn primary" type="submit">添加</button></div>
+</form>
+<div class="card" style="overflow:hidden"><table class="tbl">
+  <thead><tr><th>名称</th><th>网址</th><th>描述</th><th>状态</th><th style="text-align:right">操作</th></tr></thead>
+  <tbody>${o.links.length
+    ? o.links
+        .map(
+          (l) => `<tr>
+    <td>${esc(l.name)}</td>
+    <td class="small"><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.url)}</a></td>
+    <td class="small muted">${esc(l.description || '—')}</td>
+    <td><span class="badge ${l.enabled ? 'pub' : 'draft'}">${l.enabled ? '启用' : '停用'}</span></td>
+    <td style="text-align:right">
+      <form method="post" action="/admin/links/${l.id}/toggle" style="display:inline"><button class="btn sm">${l.enabled ? '停用' : '启用'}</button></form>
+      <form method="post" action="/admin/links/${l.id}/delete" style="display:inline" onsubmit="return confirm('删除这条友链？')"><button class="btn sm danger">删除</button></form>
+    </td>
+  </tr>`
+        )
+        .join('')
+    : '<tr><td colspan="5" class="center faint small">还没有友链</td></tr>'}</tbody>
+</table></div>`
+  return adminPage({ title: '友情链接', body, active: '/admin/links', user: o.user, settings: o.settings })
+}
+
+/** 备份管理 */
+export function backupPage(o: {
+  settings: SiteSettings
+  user: { username: string; display_name: string }
+  msg?: string
+  err?: string
+  stats?: Record<string, number>
+}): string {
+  const body = `
+${pageHead('备份与恢复')}
+${o.msg ? `<div class="alert ok">${esc(o.msg)}</div>` : ''}
+${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
+<div class="card pad" style="margin-bottom:20px">
+  <div class="small muted" style="font-weight:600;margin-bottom:8px">导出备份</div>
+  <div class="small faint" style="line-height:1.8;margin-bottom:14px">下载全站 JSON：文章、独立页面、分类、标签、评论、媒体记录、友链、站点设置。<b>不含</b>密码哈希、图床 Token 密文与 Turnstile Secret，可安全留存。</div>
+  <a class="btn primary" href="/admin/backup/export">下载备份 JSON</a>
+</div>
+<div class="card pad">
+  <div class="small muted" style="font-weight:600;margin-bottom:8px">导入恢复</div>
+  <div class="small faint" style="line-height:1.8;margin-bottom:14px">从 ABNcms 备份 JSON 恢复。<b>按主键幂等导入</b>，已存在的内容会跳过、不会覆盖现有数据。适合迁移站点或恢复误删内容。导入后请刷新前台确认。</div>
+  <form method="post" action="/admin/backup/import" enctype="multipart/form-data" onsubmit="return confirm('确定导入？已存在的数据会被跳过，不会覆盖。')">
+    <div class="field"><label>选择备份文件（.json）</label><input type="file" name="file" accept=".json,application/json" required></div>
+    <button class="btn" type="submit">导入</button>
+  </form>
+  ${o.stats ? `<div class="alert ok" style="margin-top:14px">导入完成：${Object.entries(o.stats).map(([k, v]) => esc(k) + ' ' + v).join(' · ')}</div>` : ''}
+</div>`
+  return adminPage({ title: '备份与恢复', body, active: '/admin/backup', user: o.user, settings: o.settings })
 }

@@ -92,4 +92,8 @@ export interface SiteSettings {
   enable_prevnext: string
   enable_semantic: string
   enable_ai: string
+  /** 友情链接开关：0 = 侧栏不查 links 表 */
+  enable_links: string
+  /** 自定义导航菜单 JSON（[{label,href}]），空则用默认导航 */
+  nav_menu: string
 }

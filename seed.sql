@@ -31,7 +31,7 @@ VALUES
 
 -- ── 演示文章 ───────────────────────────────────────────────────────────────
 INSERT OR IGNORE INTO posts
-  (slug, title, excerpt, content_md, content_html, status, category_id, pinned, published_at, reading_time)
+  (slug, title, excerpt, content_md, content_html, cover, status, category_id, pinned, published_at, reading_time)
 VALUES
   (
     'hello-abncms',
@@ -63,6 +63,7 @@ VALUES
 <blockquote><p>发布、改文、删文、改评论时只递增缓存代数，旧缓存立即不再命中——不需要 purge，也不会出现「后台改了前台没变」。</p></blockquote>
 <h2>下一步</h2>
 <ul><li>在「使用教程」里看如何发布第一篇文章</li><li>在「设置」里配置图床地址与 Token，或粘贴第三方统计代码</li><li>默认 LOGO 是图标加站名，改站名会自动同步</li></ul>',
+    '/covers/cover-tech.svg',
     'published', 1, 1, datetime('now'), 2
   ),
   (
@@ -110,6 +111,7 @@ npx wrangler d1 execute &lt;数据库名&gt; --remote --file=./seed.sql</code></
 <p>打开 <code>/admin/login</code> 登录，进入「写文章」。标题必填，正文用 Markdown，右侧实时预览。<strong>新建文章默认是正式发布</strong>，保存后首页立即可见；只有主动选「草稿」才会藏起来。</p>
 <h2>5. 确认缓存生效</h2>
 <p>在浏览器开发者工具里看响应头：<code>x-abn-cache: MISS</code> 表示这次是首次渲染并写入缓存，再刷新一次变成 <code>HIT</code>，说明后续访问不再查库。</p>',
+    '/covers/cover-tutorial.svg',
     'published', 5, 0, datetime('now'), 4
   ),
   (
@@ -147,6 +149,7 @@ Cloudflare 免费版每天（UTC 00:00 重置）的硬上限是：Workers **10 �
 <p>1. <strong>关掉内置统计，改用第三方代码。</strong> 后台「设置 → 第三方统计代码」粘贴百度统计或 Umami 的完整 script，本站读写立刻归零。 2. <strong>保留页面缓存。</strong> 它让 D1 行读只占额度的百分之几，把最贵的数据库查询挡在缓存后面。 3. <strong>关掉用不到的功能。</strong> 语义搜索、AI 摘要、相关阅读、上下篇、侧栏热门都有独立开关，关闭后对应的查询根本不执行。</p>
 <h2>超出额度会怎样</h2>
 <p>不是降速，是这一类操作直接报错。好在设置读取有降级逻辑，会退回默认值；但会话写不进去会导致无法登录——所以务必给统计和缓存留足余量。</p>',
+    '/covers/cover-tech.svg',
     'published', 1, 0, datetime('now'), 5
   ),
   (
@@ -197,6 +200,7 @@ var _hmt = _hmt || [];
 <p>保存后代码会原样注入前台每个页面的底部。想彻底零消耗，把上面的「开启访问统计」取消勾选即可——第三方代码<strong>不会</strong>跟着被关掉，两者互不依赖。</p>
 <h2>安全提醒</h2>
 <p>这段代码只有管理员能填写，会以原始 HTML 注入。请只粘贴来源可信的服务商代码，不要从不明网站复制整段脚本。</p>',
+    '/covers/cover-tech.svg',
     'published', 1, 0, datetime('now'), 3
   ),
   (
@@ -237,13 +241,14 @@ Token 会用 **AES-GCM** 加密后存入 D1，主密钥 `CONFIG_ENCRYPTION_KEY` 
 <p>上传成功后，媒体库登记的是图床返回的完整外链，编辑器里可以直接复制使用。</p>
 <h2>没有主密钥怎么办</h2>
 <p>未配置 <code>CONFIG_ENCRYPTION_KEY</code> 时是「仅环境变量模式」：可以改图床地址，但不能在后台写入 Token。此时用 <code>wrangler secret put IMGBED_TOKEN</code> 注入即可。</p>',
+    '/covers/cover-tutorial.svg',
     'published', 5, 0, datetime('now'), 4
   ),
   (
     'why-lightweight-cms',
     '为什么我们需要一个轻量的 CMS',
     '不是每个站点都需要数据库主机和容器；边缘优先的轻量方案更适合小站长。',
-    '## 复杂性的成本
+    '##  complication 的成本
 
 传统 CMS 往往意味着：一台服务器、一个数据库实例、一套备份方案，以及每月固定的账单。对于个人博客、作品集、小型资讯站来说，这些成本远大于实际需要。
 
@@ -263,7 +268,7 @@ ABNcms 把前台、后台、API、定时任务全部塞进一个 Worker：内容
 ## 未来
 
 主题引擎和应用商店在规划中。代码采用 MIT 协议，名称与 Logo 另有商标说明，方便二次开发和社区共建。',
-    '<h2>复杂性的成本</h2>
+    '<h2> complication 的成本</h2>
 <p>传统 CMS 往往意味着：一台服务器、一个数据库实例、一套备份方案，以及每月固定的账单。对于个人博客、作品集、小型资讯站来说，这些成本远大于实际需要。</p>
 <h2>边缘优先的另一条路</h2>
 <p>ABNcms 把前台、后台、API、定时任务全部塞进一个 Worker：内容存 D1，会话与设置存 KV，页面 HTML 放边缘缓存，图片交给外部图床。没有服务器要维护，也没有数据库主机要付钱。</p>
@@ -272,6 +277,7 @@ ABNcms 把前台、后台、API、定时任务全部塞进一个 Worker：内容
 <ul><li>新建文章默认正式发布，保存后首页立刻可见</li><li>文章地址是 <code>/p/xxx.html</code> 这样的伪静态，旧地址自动跳转</li><li>功能开关齐全：评论、统计、AI、语义搜索都能单独关掉</li><li>后台可配置 LOGO、图床、第三方统计，不用碰代码</li></ul>
 <h2>未来</h2>
 <p>主题引擎和应用商店在规划中。代码采用 MIT 协议，名称与 Logo 另有商标说明，方便二次开发和社区共建。</p>',
+    '/covers/cover-product.svg',
     'published', 2, 0, datetime('now'), 3
   ),
   (
@@ -300,6 +306,7 @@ ABNcms 把前台、后台、API、定时任务全部塞进一个 Worker：内容
 <blockquote><p>演示站的数据会被恢复，请勿把它当作正式内容存储使用。</p></blockquote>
 <h2>自己搭一套</h2>
 <p>参考 <code>quick-start</code> 那篇文章，从 <code>wrangler.example.jsonc</code> 开始，十分钟就能拥有同样的站点。代码仓库里有完整的 README 和策划文档。</p>',
+    '/covers/cover-notice.svg',
     'published', 6, 0, datetime('now'), 2
   ),
   (
@@ -313,5 +320,6 @@ ABNcms 把前台、后台、API、定时任务全部塞进一个 Worker：内容
 - 写入如何批量聚合',
     '<p>草稿内容待补充。这份文章故意保持草稿状态，用来演示后台的筛选与前台的隐藏逻辑。</p>
 <ul><li>哪些状态可以放边缘缓存</li><li>什么时候必须回源 D1</li><li>写入如何批量聚合</li></ul>',
+    '/covers/cover-essay.svg',
     'draft', 3, 0, NULL, 1
   );

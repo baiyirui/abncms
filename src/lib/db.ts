@@ -23,7 +23,9 @@ const DEFAULT_SETTINGS: SiteSettings = {
   enable_related: '1',
   enable_prevnext: '1',
   enable_semantic: '0',
-  enable_ai: '0'
+  enable_ai: '0',
+  enable_links: '0',
+  nav_menu: ''
 }
 
 /** 站点设置：优先 KV 缓存，回源 D1。
@@ -314,4 +316,98 @@ export async function ensureAdmin(env: Env, password: string): Promise<void> {
   )
     .bind('admin', hash, '管理员', 'admin')
     .run()
+}
+
+// ── 备份 / 恢复 ──────────────────────────────────────────────────────────────
+
+/** 导出全站数据。敏感项（密码哈希、Token 密文、Turnstile Secret）一律剔除。 */
+export async function exportAll(env: Env): Promise<Record<string, any>> {
+  const TABLES = [
+    'categories', 'tags', 'posts', 'post_tags', 'comments', 'media',
+    'pages', 'links'
+  ]
+  const result: Record<string, any> = {
+    format: 'abncms-backup',
+    version: 1,
+    exported_at: new Date().toISOString(),
+    data: {}
+  }
+  for (const t of TABLES) {
+    try {
+      const { results } = await env.DB.prepare(`SELECT * FROM ${t}`).all<any>()
+      result.data[t] = results || []
+    } catch {
+      result.data[t] = []
+    }
+  }
+  const { results: settings } = await env.DB.prepare(
+    "SELECT key, value FROM settings WHERE key NOT IN ('imgbed_token_enc','turnstile_secret','CONFIG_ENCRYPTION_KEY')"
+  ).all<any>()
+  result.data.settings = settings || []
+  return result
+}
+
+/**
+ * 导入备份。幂等：按主键/唯一键 INSERT OR IGNORE，不覆盖已有内容。
+ * 返回每张表的导入统计；未知表与非法字段直接跳过。
+ */
+export async function importAll(env: Env, payload: any): Promise<Record<string, number>> {
+  if (!payload || payload.format !== 'abncms-backup' || !payload.data) {
+    throw new Error('不是有效的 ABNcms 备份文件')
+  }
+  const SPEC: Record<string, { cols: string[]; keys: string[] }> = {
+    categories: { cols: ['id', 'name', 'slug', 'description', 'sort_order'], keys: ['id'] },
+    tags: { cols: ['id', 'name', 'slug'], keys: ['id'] },
+    posts: {
+      cols: ['id', 'slug', 'title', 'excerpt', 'content_md', 'content_html', 'cover', 'status',
+        'pinned', 'category_id', 'author_id', 'views', 'ai_summary', 'reading_time',
+        'created_at', 'updated_at', 'published_at'],
+      keys: ['id']
+    },
+    post_tags: { cols: ['post_id', 'tag_id'], keys: ['post_id', 'tag_id'] },
+    comments: {
+      cols: ['id', 'post_id', 'author', 'email', 'website', 'content', 'status', 'created_at'],
+      keys: ['id']
+    },
+    media: {
+      cols: ['id', 'key', 'filename', 'content_type', 'size', 'uploader_id', 'created_at'],
+      keys: ['id']
+    },
+    settings: { cols: ['key', 'value'], keys: ['key'] },
+    pages: {
+      cols: ['id', 'slug', 'title', 'content_md', 'content_html', 'status', 'sort_order',
+        'created_at', 'updated_at'],
+      keys: ['id']
+    },
+    links: {
+      cols: ['id', 'name', 'url', 'description', 'sort_order', 'enabled', 'created_at'],
+      keys: ['id']
+    }
+  }
+  const stats: Record<string, number> = {}
+  // 先按依赖顺序写主表，再写关联表
+  const order = ['settings', 'categories', 'tags', 'posts', 'pages', 'links', 'comments', 'post_tags', 'media']
+  for (const table of order) {
+    const spec = SPEC[table]
+    const rows = Array.isArray(payload.data[table]) ? payload.data[table] : []
+    let n = 0
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue
+      const cols = spec.cols.filter((c) => row[c] !== undefined && row[c] !== null)
+      if (!cols.length) continue
+      const marks = cols.map(() => '?').join(',')
+      try {
+        await env.DB.prepare(
+          `INSERT OR IGNORE INTO ${table} (${cols.join(',')}) VALUES (${marks})`
+        )
+          .bind(...cols.map((c) => String(row[c])))
+          .run()
+        n++
+      } catch {
+        /* 单条失败不影响其它记录 */
+      }
+    }
+    stats[table] = n
+  }
+  return stats
 }

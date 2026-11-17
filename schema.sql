@@ -87,6 +87,30 @@ CREATE TABLE IF NOT EXISTS media (
   created_at   TEXT    DEFAULT (datetime('now'))
 );
 
+-- ── 独立页面 ───────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS pages (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug         TEXT    NOT NULL UNIQUE,
+  title        TEXT    NOT NULL,
+  content_md   TEXT    DEFAULT '',
+  content_html TEXT    DEFAULT '',
+  status       TEXT    DEFAULT 'published',
+  sort_order   INTEGER DEFAULT 0,
+  created_at   TEXT    DEFAULT (datetime('now')),
+  updated_at   TEXT    DEFAULT (datetime('now'))
+);
+
+-- ── 友情链接 ───────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS links (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT    NOT NULL,
+  url         TEXT    NOT NULL,
+  description TEXT    DEFAULT '',
+  sort_order  INTEGER DEFAULT 0,
+  enabled     INTEGER DEFAULT 1,
+  created_at  TEXT    DEFAULT (datetime('now'))
+);
+
 -- ── 站点设置 ───────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
@@ -150,11 +174,14 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   ('enable_related',   '1'),
   ('enable_prevnext',  '1'),
   ('enable_semantic',  '0'),
-  ('enable_ai',        '0');
+  ('enable_ai',        '0'),
+  ('enable_links',     '0'),
+  ('nav_menu',         '');
 
 -- 全新安装等同于已应用全部历史迁移，后续只需跑新增的 migrations/*.sql
 INSERT OR IGNORE INTO schema_migrations (version, description) VALUES
   ('001_baseline',         'v0.1 initial schema (cf-press)'),
   ('002_v0.2_settings',    'v0.2 site logo / image host / analytics settings'),
   ('003_cache_and_switches','v0.2.1 page cache generation / quota switches'),
-  ('004_analytics_script',  'v0.2.3 third-party analytics script setting');
+  ('004_analytics_script',  'v0.2.3 third-party analytics script setting'),
+  ('005_pages_links_backup','v0.2.4 pages / links / navigation menu');
