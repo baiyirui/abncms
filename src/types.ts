@@ -72,7 +72,9 @@ export interface SiteSettings {
   allow_comments: string
   turnstile_secret: string
   analytics_enabled: string
-  /** 站点 LOGO 完整外链，空则回退文字站名 */
+  /** 第三方统计代码（管理员填写，原样注入前台 </body> 前），与内置打点互不依赖 */
+  analytics_script: string
+  /** 站点 LOGO 完整外链，空则回退「图标 + 站名」默认样式 */
   site_logo: string
   site_logo_height: string
   /** 图床后台配置：地址 / Token 密文 / 掩码提示 / 名称 / 默认渠道 */

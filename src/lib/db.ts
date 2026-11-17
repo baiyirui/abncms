@@ -9,6 +9,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   allow_comments: '1',
   turnstile_secret: '2x0000000000000000000000000000000AA',
   analytics_enabled: '1',
+  analytics_script: '',
   site_logo: '',
   site_logo_height: '36',
   imgbed_base_url: '',

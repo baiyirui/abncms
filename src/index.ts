@@ -772,6 +772,8 @@ app.post('/admin/settings', guard, async (c) => {
     posts_per_page: String(Math.min(50, Math.max(1, Number(b.posts_per_page) || 10))),
     allow_comments: b.allow_comments === '1' ? '1' : '0',
     analytics_enabled: b.analytics_enabled === '1' ? '1' : '0',
+    // 第三方统计代码：仅管理员可写，原样注入前台；限制长度防止误粘贴整页内容
+    analytics_script: String(b.analytics_script || '').slice(0, 8000),
     // 额度开关： unchecked 一律视为关闭，避免老表单漏字段时误开功能
     enable_page_cache: b.enable_page_cache === '1' ? '1' : '0',
     enable_hot: b.enable_hot === '1' ? '1' : '0',

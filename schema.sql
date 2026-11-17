@@ -136,6 +136,7 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   ('allow_comments',   '1'),
   ('turnstile_secret', '2x0000000000000000000000000000000AA'),
   ('analytics_enabled','1'),
+  ('analytics_script', ''),
   ('site_logo',        ''),
   ('site_logo_height', '36'),
   ('imgbed_base_url',  ''),
@@ -155,4 +156,5 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
 INSERT OR IGNORE INTO schema_migrations (version, description) VALUES
   ('001_baseline',         'v0.1 initial schema (cf-press)'),
   ('002_v0.2_settings',    'v0.2 site logo / image host / analytics settings'),
-  ('003_cache_and_switches','v0.2.1 page cache generation / quota switches');
+  ('003_cache_and_switches','v0.2.1 page cache generation / quota switches'),
+  ('004_analytics_script',  'v0.2.3 third-party analytics script setting');

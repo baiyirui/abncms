@@ -410,6 +410,9 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
   </div>
   <div class="field"><label class="row small" style="gap:7px;font-weight:500"><input type="checkbox" name="analytics_enabled" value="1" ${s.analytics_enabled !== '0' ? 'checked' : ''}> 开启访问统计（前端异步打点）</label>
     <div class="small faint" style="margin-top:5px;line-height:1.7">关闭后前台不再发送打点请求，<b>阅读量零写入</b>；开启后仅 25% 采样上报，权重 ×4 还原估算阅读量。</div></div>
+  <div class="field"><label>第三方统计代码（可选，推荐）</label>
+    <textarea class="input" name="analytics_script" rows="5" placeholder="粘贴百度统计 / Google Analytics / Umami 等完整 &lt;script&gt; 代码" style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:1.6">${esc(s.analytics_script || '')}</textarea>
+    <div class="small faint" style="margin-top:5px;line-height:1.7">代码会<b>原样注入前台页面底部</b>，与内置打点互不依赖：可以关掉上面的内置统计、只留这里，本站 D1 / KV <b>零消耗</b>，额度全部留给访客。仅管理员可填写，请勿粘贴来源不明的代码；留空则不注入。</div></div>
 
   <div class="small muted" style="font-weight:600;margin:22px 0 12px;border-top:1px solid var(--border);padding-top:18px">功能开关 · 免费额度控制</div>
   <div class="small faint" style="margin-bottom:12px;line-height:1.7">关掉的功能不会产生对应的 D1 查询或 KV 写入。<b>页面缓存建议保持开启</b>：匿名访客命中缓存后只花 1 次 KV 读、<b>0 次 D1 查询</b>；发布或改评论时缓存代数 +1，全站页面立刻更新，不会出现「后台改了前台不显示」。</div>
@@ -425,8 +428,8 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
 
   <div class="small muted" style="font-weight:600;margin:22px 0 12px;border-top:1px solid var(--border);padding-top:18px">站点 LOGO</div>
   <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
-    <div id="logo-preview" style="min-width:160px;height:60px;display:flex;align-items:center;justify-content:center;background:var(--bg-2,#f6f7f9);border:1px dashed var(--border);border-radius:8px;padding:8px">
-      ${s.site_logo ? `<img src="${esc(s.site_logo)}" alt="LOGO" style="max-height:${esc(s.site_logo_height)}px;max-width:200px;object-fit:contain">` : '<span class="small faint">未上传</span>'}
+    <div id="logo-preview" style="min-width:160px;height:60px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--bg-2,#f6f7f9);border:1px dashed var(--border);border-radius:8px;padding:8px">
+      ${s.site_logo ? `<img src="${esc(s.site_logo)}" alt="LOGO" style="max-height:${esc(s.site_logo_height)}px;max-width:200px;object-fit:contain">` : `<img src="/logo-mark.svg" alt="" style="height:26px;width:26px"><b style="font-size:16px">${esc(s.site_name)}</b>`}
     </div>
     <div style="flex:1;min-width:240px">
       <div class="field"><label>LOGO 地址（也可粘贴外链）</label><input class="input" id="site_logo" name="site_logo" value="${esc(s.site_logo)}" placeholder="https://your-image-host.example.com/file/logo.svg"></div>
@@ -435,7 +438,7 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
         <button class="btn" type="button" id="btn-logo-clear">清除</button>
         <input type="file" id="logo-file" accept="image/*" hidden>
       </div>
-      <div class="small faint" style="margin-top:8px;line-height:1.7">推荐：显示高 <b>32–40px</b>，源文件 <b>2x（64–80px）</b>，宽 ≤ 200px 横版，<b>SVG 优先</b>（&lt;20KB），位图 PNG/WebP 透明底 &lt;100KB，四周留 8px 安全区。尺寸不符只影响观感，不会阻止上传。</div>
+      <div class="small faint" style="margin-top:8px;line-height:1.7">留空则使用<b>默认 LOGO：图标 + 站名文字</b>（站名改了会自动同步）。自定义推荐：显示高 <b>32–40px</b>，源文件 <b>2x（64–80px）</b>，宽 ≤ 200px 横版，<b>SVG 优先</b>（&lt;20KB），位图 PNG/WebP 透明底 &lt;100KB，四周留 8px 安全区。</div>
     </div>
   </div>
   <div class="field" style="margin-top:12px"><label>LOGO 显示高度（px，24–120）</label><input class="input" name="site_logo_height" type="number" min="24" max="120" value="${esc(s.site_logo_height)}"></div>

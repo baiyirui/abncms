@@ -42,6 +42,7 @@ img{max-width:100%;height:auto}
 .site-header{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--border)}
 .site-header .wrap{height:60px;display:flex;align-items:center;gap:18px}
 .brand{font-size:18px;font-weight:700;letter-spacing:-.02em;display:flex;align-items:center;gap:9px}
+.brand .mark{width:27px;height:27px;display:block;flex:none}
 .brand .dot{width:10px;height:10px;border-radius:3px;background:var(--accent);display:inline-block}
 .nav{display:flex;gap:18px;font-size:14.5px;color:var(--muted)}
 .nav a:hover,.nav a.on{color:var(--text)}
@@ -233,9 +234,10 @@ export function page(o: PageOpts): string {
   const main = o.sidebar
     ? `<div class="layout"><div>${o.body}</div><aside class="sidebar">${o.sidebar}</aside></div>`
     : o.body
-  // 访问统计：页面 HTML 由 CDN 边缘缓存供给，Worker 不执行，所以浏览量改由
-  // 前端异步打点 + 服务端按采样权重聚合。关闭统计后不注入任何脚本，
-  // 前台即成为纯静态供给（命中时 Workers / D1 / KV 消耗均为 0）。
+  // 访问统计两套机制，互不依赖：
+  //  1) 内置打点：25% 采样 → /api/hit → D1 聚合写；关闭后前台零写入。
+  //  2) 第三方代码：管理员在后台原样填写（百度统计 / GA / Umami 等），
+  //     即使关掉内置打点也会注入，不消耗本站 Workers/D1/KV 额度。
   const hitScript =
     s.analytics_enabled === '0'
       ? ''
@@ -246,6 +248,7 @@ var f=new URLSearchParams();f.set('p',location.pathname);f.set('w','4');
 if(navigator.sendBeacon)navigator.sendBeacon('/api/hit',f);
 else fetch('/api/hit',{method:'POST',body:f,keepalive:true});
 }catch(e){}})();</script>`
+  const thirdPartyScript = s.analytics_script || ''
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -264,7 +267,7 @@ ${o.head || ''}
 </head>
 <body>
 <header class="site-header"><div class="wrap">
-  <a class="brand" href="/">${s.site_logo && /^https?:\/\//.test(s.site_logo) ? `<img src="${esc(s.site_logo)}" alt="${esc(s.site_name)}" style="height:${Math.min(120, Math.max(24, Number(s.site_logo_height) || 36))}px;max-width:200px;object-fit:contain">` : `<span class="dot"></span>${esc(s.site_name)}`}</a>
+  <a class="brand" href="/">${s.site_logo && /^(https?:\/\/|\/)/.test(s.site_logo) ? `<img src="${esc(s.site_logo)}" alt="${esc(s.site_name)}" style="height:${Math.min(120, Math.max(24, Number(s.site_logo_height) || 36))}px;max-width:200px;object-fit:contain">` : `<img class="mark" src="/logo-mark.svg" alt=""><span>${esc(s.site_name)}</span>`}</a>
   <span class="grow"></span>
   <nav class="nav">
     ${nav
@@ -283,6 +286,7 @@ ${o.head || ''}
   <span>© ${new Date().getFullYear()} ${esc(s.site_name)}</span>
 </div></footer>
 ${hitScript}
+${thirdPartyScript}
 </body></html>`
 }
 
@@ -317,7 +321,7 @@ ${o.head || ''}
 </head>
 <body>
 <header class="site-header"><div class="wrap">
-  <a class="brand" href="/">${o.settings.site_logo && /^https?:\/\//.test(o.settings.site_logo) ? `<img src="${esc(o.settings.site_logo)}" alt="${esc(o.settings.site_name)}" style="height:${Math.min(120, Math.max(24, Number(o.settings.site_logo_height) || 36))}px;max-width:200px;object-fit:contain">` : `<span class="dot"></span>${esc(o.settings.site_name)}`}</a>
+  <a class="brand" href="/">${o.settings.site_logo && /^(https?:\/\/|\/)/.test(o.settings.site_logo) ? `<img src="${esc(o.settings.site_logo)}" alt="${esc(o.settings.site_name)}" style="height:${Math.min(120, Math.max(24, Number(o.settings.site_logo_height) || 36))}px;max-width:200px;object-fit:contain">` : `<img class="mark" src="/logo-mark.svg" alt=""><span>${esc(o.settings.site_name)}</span>`}</a>
   <span class="grow"></span>
   <a class="btn sm" href="/" target="_blank">查看站点</a>
   <span class="small muted">${esc(o.user.display_name || o.user.username)}</span>
