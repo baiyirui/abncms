@@ -1,6 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 224 60" role="img" aria-label="ABNCMS">
-  <g font-family="Arial,Helvetica,sans-serif" font-size="46" font-weight="400" fill="none" stroke-width="1.6" stroke-linejoin="round">
-    <text x="4" y="45" textLength="106" lengthAdjust="spacingAndGlyphs" stroke="#ff6a1a">ABN</text>
-    <text x="114" y="45" textLength="106" lengthAdjust="spacingAndGlyphs" stroke="#3a3a3a">CMS</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 196 64" role="img" aria-label="ABNCMS">
+  <g transform="translate(9,0) skewX(-7)">
+    <!-- ABN：实心橙 -->
+    <g fill="#ff6a1a">
+      <path d="M0 52 L10 12 H15 L5 52 Z M16 12 H21 L27 52 H22 Z M7 38 H20 V45 H7 Z"/>
+      <path fill-rule="evenodd" d="M31 12 H44 C52 12 56 16 56 22 C56 26 54 29 50 31 C55 32 58 36 58 42 C58 49 53 52 44 52 H31 Z M40 20 V27 H43 C46 27 47 25 47 23.5 C47 22 46 20 43 20 Z M40 35 V44 H44 C47 44 49 42 49 39.5 C49 37 47 35 44 35 Z"/>
+      <path d="M62 52 V12 H70 L82 36 V12 H88 V52 H80 L68 28 V52 Z"/>
+    </g>
+    <!-- CMS：实心深灰 -->
+    <g fill="#24272b" transform="translate(-10,0)">
+      <path fill-rule="evenodd" d="M129 20 C126 14 121 12 115 12 C108 12 103 19 103 32 C103 45 108 52 115 52 C121 52 126 50 129 44 L121 40 C120 43 118 44 115 44 C112 44 111 40 111 32 C111 24 112 20 115 20 C118 20 120 21 121 24 Z"/>
+      <path d="M137 52 V12 H146 L152 33 L158 12 H167 V52 H159 V27 L154 45 H150 L145 27 V52 Z"/>
+      <path d="M189 19 C186 15 182 14 178 14 C173 14 171 17 171 22 C171 27 176 30 182 31 C188 32 191 35 191 41 C191 46 187 49 181 49 C176 49 173 47 171 43" fill="none" stroke="#24272b" stroke-width="7" stroke-linecap="butt" stroke-linejoin="round"/>
+    </g>
   </g>
 </svg>

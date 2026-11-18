@@ -429,12 +429,12 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
   <div class="small muted" style="font-weight:600;margin:22px 0 12px;border-top:1px solid var(--border);padding-top:18px">导航菜单</div>
   <div class="field"><label class="row small" style="gap:7px;font-weight:500"><input type="checkbox" name="enable_links" value="1" ${s.enable_links === '1' ? 'checked' : ''}> 侧栏显示友情链接</label></div>
   <div class="field"><label>顶部导航（每行一条：显示名 | 地址；留空用默认）</label>
-    <textarea class="input" name="nav_menu" rows="6" placeholder="首页 | /\n归档 | /archive\n关于 | /page/about.html" style="font-family:ui-monospace,monospace;font-size:12px">${esc((() => { try { return (JSON.parse(s.nav_menu || '[]') as any[]).map((m) => `${m.label} | ${m.href}`).join('\n') } catch { return '' } })())}</textarea>
+    <textarea class="input" name="nav_menu" rows="6" placeholder="首页 | /\n免费资源 | /c/mfzy\n关于 | /page/about.html" style="font-family:ui-monospace,monospace;font-size:12px">${esc((() => { try { return (JSON.parse(s.nav_menu || '[]') as any[]).map((m) => `${m.label} | ${m.href}`).join('\n') } catch { return '' } })())}</textarea>
     <div class="row" style="gap:8px;margin-top:8px">
       <form method="post" action="/admin/menu/from-categories" style="display:inline"><button class="btn sm" type="submit">一键用分类生成菜单</button></form>
       <span class="small faint">生成后仍可手动增删行</span>
     </div>
-    <div class="small faint" style="margin-top:6px;line-height:1.7">参考格熊风格，顶部菜单建议放<b>分类导航</b>。可填站内路径（<code>/c/tech</code>、<code>/page/about.html</code>）或完整外链；留空则显示「首页 / 归档 / 标签」。搜索入口固定在右侧放大镜图标。友情链接内容请到「友情链接」页管理。</div></div>
+    <div class="small faint" style="margin-top:6px;line-height:1.7">参考格熊风格，顶部菜单建议放<b>分类导航</b>。可填站内路径（<code>/c/mfzy</code>、<code>/page/about.html</code>）或完整外链；留空则显示「首页 / 归档 / 标签」。搜索入口固定在右侧放大镜图标。<b>增删分类后请点上方按钮重新生成菜单</b>，否则旧链接会 404。友情链接内容请到「友情链接」页管理。</div></div>
 
   <div class="small muted" style="font-weight:600;margin:22px 0 12px;border-top:1px solid var(--border);padding-top:18px">站点 LOGO</div>
   <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
@@ -448,7 +448,7 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
         <button class="btn" type="button" id="btn-logo-clear">清除</button>
         <input type="file" id="logo-file" accept="image/*" hidden>
       </div>
-      <div class="small faint" style="margin-top:8px;line-height:1.7">留空则使用<b>默认 LOGO：ABNCMS 橙色描边字标</b>（<code>/logo.svg</code>）。自定义推荐：显示高 <b>30–40px</b>，源文件 <b>2x（60–80px）</b>，宽 ≤ 200px 横版，<b>SVG 优先</b>（&lt;20KB），位图 PNG/WebP 透明底 &lt;100KB，四周留 8px 安全区。</div>
+      <div class="small faint" style="margin-top:8px;line-height:1.7">留空则使用<b>默认 LOGO：ABNCMS 橙灰双色实心字标</b>（<code>/logo.svg</code>）。自定义推荐：显示高 <b>30–40px</b>，源文件 <b>2x（60–80px）</b>，宽 ≤ 200px 横版，<b>SVG 优先</b>（&lt;20KB），位图 PNG/WebP 透明底 &lt;100KB，四周留 8px 安全区。</div>
     </div>
   </div>
   <div class="field" style="margin-top:12px"><label>LOGO 显示高度（px，24–120）</label><input class="input" name="site_logo_height" type="number" min="24" max="120" value="${esc(s.site_logo_height)}"></div>

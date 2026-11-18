@@ -42,7 +42,7 @@ img{max-width:100%;height:auto}
 .site-header{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--border)}
 .site-header .wrap{height:64px;display:flex;align-items:center;gap:22px}
 .brand{font-size:18px;font-weight:700;letter-spacing:-.02em;display:flex;align-items:center;gap:9px}
-.brand .mark{width:96px;height:30px;display:block;flex:none;object-fit:contain}
+.brand .mark{width:104px;height:34px;display:block;flex:none;object-fit:contain}
 .brand .dot{width:10px;height:10px;border-radius:3px;background:var(--accent);display:inline-block}
 .nav{display:flex;gap:18px;font-size:14.5px;color:var(--muted)}
 .nav a:hover,.nav a.on{color:var(--text)}

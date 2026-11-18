@@ -790,13 +790,12 @@ app.post('/admin/links/:id/delete', guard, async (c) => {
   return c.redirect('/admin/links?saved=1')
 })
 
-// 一键按当前分类生成顶部菜单（首页 + 全部分类 + 搜索）
+// 一键按当前分类生成顶部菜单（首页 + 全部分类）；搜索由右上角放大镜单独渲染
 app.post('/admin/menu/from-categories', guard, async (c) => {
   const cats = await db.listCategories(c.env)
   const menu = [
     { label: '首页', href: '/' },
-    ...cats.map((x) => ({ label: x.name, href: '/c/' + x.slug })),
-    { label: '搜索', href: '/search' }
+    ...cats.map((x) => ({ label: x.name, href: '/c/' + x.slug }))
   ]
   await db.saveSettings(c.env, { nav_menu: JSON.stringify(menu) })
   return c.redirect('/admin/settings?saved=1&menu=1')

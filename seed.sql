@@ -27,7 +27,8 @@ VALUES
   ('analytics_enabled', '1'),
   ('analytics_script',  ''),
   ('site_logo',         ''),
-  ('site_logo_height',  '36');
+  ('site_logo_height',  '36'),
+  ('nav_menu',          '[{"label":"首页","href":"/"},{"label":"技术笔记","href":"/c/tech"},{"label":"产品观察","href":"/c/product"},{"label":"随笔","href":"/c/essay"},{"label":"资源分享","href":"/c/resources"},{"label":"使用教程","href":"/c/tutorial"},{"label":"站点公告","href":"/c/notice"}]');
 
 -- ── 演示文章 ───────────────────────────────────────────────────────────────
 INSERT OR IGNORE INTO posts
@@ -55,14 +56,14 @@ VALUES
 
 - 在「使用教程」里看如何发布第一篇文章
 - 在「设置」里配置图床地址与 Token，或粘贴第三方统计代码
-- 默认 LOGO 是图标加站名，改站名会自动同步',
+- 默认 LOGO 是 ABNCMS 橙灰双色实心字标，也可在后台上传自定义 LOGO',
     '<h2>它跑在哪里</h2>
 <p>页面由 <strong>Cloudflare Workers</strong> 在就近节点渲染，数据存 <strong>D1</strong>（SQLite），会话与缓存在 <strong>KV</strong>，页面 HTML 放在边缘缓存，图片上传到<strong>外部图床</strong>并以外链引用。没有服务器，没有容器，<code>wrangler deploy</code> 一条命令上线。</p>
 <h2>免费额度的真实天花板</h2>
 <table><thead><tr><th>资源</th><th>每日额度</th><th>本项目的做法</th></tr></thead><tbody><tr><td>Workers</td><td>10 万请求 / 天</td><td>缓存命中也计请求，关掉内置统计可撑约 10 万 PV</td></tr><tr><td>D1</td><td>500 万行读 / 10 万行写</td><td>命中缓存时 0 次查询，发布时只写 1 行代数</td></tr><tr><td>KV</td><td>10 万读，仅 1,000 写</td><td>只存会话、设置、侧栏，页面缓存不占 KV</td></tr></tbody></table>
 <blockquote><p>发布、改文、删文、改评论时只递增缓存代数，旧缓存立即不再命中——不需要 purge，也不会出现「后台改了前台没变」。</p></blockquote>
 <h2>下一步</h2>
-<ul><li>在「使用教程」里看如何发布第一篇文章</li><li>在「设置」里配置图床地址与 Token，或粘贴第三方统计代码</li><li>默认 LOGO 是图标加站名，改站名会自动同步</li></ul>',
+<ul><li>在「使用教程」里看如何发布第一篇文章</li><li>在「设置」里配置图床地址与 Token，或粘贴第三方统计代码</li><li>默认 LOGO 是 ABNCMS 橙灰双色实心字标，也可在后台上传自定义 LOGO</li></ul>',
     '/covers/cover-tech.svg',
     'published', 1, 1, datetime('now'), 2
   ),
