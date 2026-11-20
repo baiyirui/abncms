@@ -448,7 +448,7 @@ ${o.err ? `<div class="alert err">${esc(o.err)}</div>` : ''}
         <button class="btn" type="button" id="btn-logo-clear">清除</button>
         <input type="file" id="logo-file" accept="image/*" hidden>
       </div>
-      <div class="small faint" style="margin-top:8px;line-height:1.7">留空则使用<b>默认 LOGO：ABNCMS 橙灰双色实心字标</b>（<code>/logo.svg</code>）。自定义推荐：显示高 <b>30–40px</b>，源文件 <b>2x（60–80px）</b>，宽 ≤ 200px 横版，<b>SVG 优先</b>（&lt;20KB），位图 PNG/WebP 透明底 &lt;100KB，四周留 8px 安全区。</div>
+      <div class="small faint" style="margin-top:8px;line-height:1.7">留空则使用<b>默认 LOGO：Quicksand 圆润字体字标（ABN 橙 / CMS 灰，已转路径）</b>（<code>/logo.svg</code>）。自定义推荐：显示高 <b>30–40px</b>，源文件 <b>2x（60–80px）</b>，宽 ≤ 200px 横版，<b>SVG 优先</b>（&lt;20KB），位图 PNG/WebP 透明底 &lt;100KB，四周留 8px 安全区。</div>
     </div>
   </div>
   <div class="field" style="margin-top:12px"><label>LOGO 显示高度（px，24–120）</label><input class="input" name="site_logo_height" type="number" min="24" max="120" value="${esc(s.site_logo_height)}"></div>

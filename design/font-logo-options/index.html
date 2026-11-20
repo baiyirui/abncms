@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>ABNCMS 字体 LOGO 候选</title>
+<style>
+@font-face{font-family:"F_quicksand";src:url("node_modules/@fontsource/quicksand/files/quicksand-latin-700-normal.woff2") format("woff2");font-weight:700;font-display:swap;}
+@font-face{font-family:"F_nunito";src:url("node_modules/@fontsource/nunito/files/nunito-latin-800-normal.woff2") format("woff2");font-weight:800;font-display:swap;}
+@font-face{font-family:"F_comfortaa";src:url("node_modules/@fontsource/comfortaa/files/comfortaa-latin-700-normal.woff2") format("woff2");font-weight:700;font-display:swap;}
+@font-face{font-family:"F_baloo-2";src:url("node_modules/@fontsource/baloo-2/files/baloo-2-latin-700-normal.woff2") format("woff2");font-weight:700;font-display:swap;}
+@font-face{font-family:"F_fredoka";src:url("node_modules/@fontsource/fredoka/files/fredoka-latin-600-normal.woff2") format("woff2");font-weight:600;font-display:swap;}
+@font-face{font-family:"F_varela-round";src:url("node_modules/@fontsource/varela-round/files/varela-round-latin-400-normal.woff2") format("woff2");font-weight:400;font-display:swap;}
+@font-face{font-family:"F_poppins";src:url("node_modules/@fontsource/poppins/files/poppins-latin-700-normal.woff2") format("woff2");font-weight:700;font-display:swap;}
+:root{--accent:#ff6a1a;--dark:#24272b;--border:#e8e9ec;--muted:#6b7076}
+*{box-sizing:border-box}
+body{margin:0;background:#f7f8fa;color:var(--dark);font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",Arial,sans-serif;padding:26px 30px 60px}
+h1{font-size:26px;margin:0 0 4px}
+.lead{color:var(--muted);margin:0 0 8px}
+.notice{background:#fff7f1;border:1px solid #ffd9c2;color:#8a4b22;padding:10px 14px;border-radius:9px;font-size:13px;margin-bottom:26px}
+.font-row{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:20px}
+.font-row h2{font-size:18px;margin:0 0 2px}
+.badge{font-size:11px;background:#f0f1f4;color:#6b7076;padding:2px 7px;border-radius:10px;font-weight:500}
+.style{color:var(--muted);font-size:12px;margin:0 0 16px}
+.cells{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.cell{border:1px solid var(--border);border-radius:9px;padding:12px;background:#fcfcfd}
+.cell-label{font-size:12px;font-weight:600;margin-bottom:10px;color:#3c4046}
+.preview{height:70px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.actual{height:40px;display:flex;align-items:center;padding:0 6px;margin-top:6px;border-top:1px dashed var(--border);overflow:hidden}
+.cell-desc{font-size:11px;color:#9a9fa6;margin-top:8px;min-height:30px}
+.sample{display:inline-block;white-space:nowrap;color:var(--dark);line-height:1}
+.preview .sample{font-size:34px;letter-spacing:-0.02em}
+.actual .sample{font-size:14px;letter-spacing:-0.02em}
+.sample.v-dual i{color:var(--accent);font-style:normal;font-weight:inherit}
+.sample.v-dual b{color:var(--dark);font-weight:inherit}
+.actual .v-dual{font-size:14px}
+.sample.v-tight{letter-spacing:-0.06em}
+.preview .v-tight{font-size:36px}
+.sample.v-slant{transform:skewX(-7deg)}
+.sample.v-badge{background:var(--accent);color:#fff;padding:6px 12px;border-radius:10px}
+.preview .v-badge{font-size:30px}
+.actual .v-badge{font-size:13px;padding:4px 7px;border-radius:6px}
+.sample.v-dot::after{content:"";display:inline-block;width:0.16em;height:0.16em;border-radius:50%;background:var(--accent);margin-left:0.06em;vertical-align:baseline}
+</style></head><body>
+<h1>ABNCMS 字体 LOGO 候选</h1>
+<p class="lead">7 款 SIL OFL 免费商用字体 × 5 种微调变化。每款字体一行，每格上半是放大预览、下半是网站实际尺寸（字高约 14px）。</p>
+<div class="notice">字体均已确认 OFL 授权，可免费商用。确定编号后我会把字形转成路径（不依赖字体文件）再上线。直接回「字体 + 变化」，例如「Nunito + 收紧字距」或「04-3」。</div>
+
+  <section class="font-row">
+    <h2>Quicksand <span class="badge">700</span></h2>
+    <p class="style">几何圆润，端点全圆角，干净友好</p>
+    <div class="cells">
+      <div class="cell">
+        <div class="cell-label">双色原字</div>
+        <div class="preview"><span class="sample v-dual" style="font-family:F_quicksand"><i>ABN</i><b>CMS</b></span></div>
+        <div class="actual"><span class="sample v-dual" style="font-family:F_quicksand"><i>ABN</i><b>CMS</b></span></div>
+        <div class="cell-desc">ABN 橙 / CMS 灰，字体原貌</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">收紧字距</div>
+        <div class="preview"><span class="sample v-tight" style="font-family:F_quicksand">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-tight" style="font-family:F_quicksand">ABNCMS</span></div>
+        <div class="cell-desc">字距 -0.06em，稍加粗，更凝聚</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">微斜切</div>
+        <div class="preview"><span class="sample v-slant" style="font-family:F_quicksand">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-slant" style="font-family:F_quicksand">ABNCMS</span></div>
+        <div class="cell-desc">整体 skewX(-7°)，带速度感</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">反白徽章</div>
+        <div class="preview"><span class="sample v-badge" style="font-family:F_quicksand">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-badge" style="font-family:F_quicksand">ABNCMS</span></div>
+        <div class="cell-desc">橙色圆角底 + 反白字</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">单色橙点</div>
+        <div class="preview"><span class="sample v-dot" style="font-family:F_quicksand">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-dot" style="font-family:F_quicksand">ABNCMS</span></div>
+        <div class="cell-desc">全深灰 + 末尾橙色圆点</div>
+      </div></div>
+  </section>
+
+  <section class="font-row">
+    <h2>Nunito <span class="badge">800</span></h2>
+    <p class="style">圆润无衬线，饱满有亲和力</p>
+    <div class="cells">
+      <div class="cell">
+        <div class="cell-label">双色原字</div>
+        <div class="preview"><span class="sample v-dual" style="font-family:F_nunito"><i>ABN</i><b>CMS</b></span></div>
+        <div class="actual"><span class="sample v-dual" style="font-family:F_nunito"><i>ABN</i><b>CMS</b></span></div>
+        <div class="cell-desc">ABN 橙 / CMS 灰，字体原貌</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">收紧字距</div>
+        <div class="preview"><span class="sample v-tight" style="font-family:F_nunito">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-tight" style="font-family:F_nunito">ABNCMS</span></div>
+        <div class="cell-desc">字距 -0.06em，稍加粗，更凝聚</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">微斜切</div>
+        <div class="preview"><span class="sample v-slant" style="font-family:F_nunito">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-slant" style="font-family:F_nunito">ABNCMS</span></div>
+        <div class="cell-desc">整体 skewX(-7°)，带速度感</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">反白徽章</div>
+        <div class="preview"><span class="sample v-badge" style="font-family:F_nunito">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-badge" style="font-family:F_nunito">ABNCMS</span></div>
+        <div class="cell-desc">橙色圆角底 + 反白字</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">单色橙点</div>
+        <div class="preview"><span class="sample v-dot" style="font-family:F_nunito">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-dot" style="font-family:F_nunito">ABNCMS</span></div>
+        <div class="cell-desc">全深灰 + 末尾橙色圆点</div>
+      </div></div>
+  </section>
+
+  <section class="font-row">
+    <h2>Comfortaa <span class="badge">700</span></h2>
+    <p class="style">连笔圆润，活泼有个性</p>
+    <div class="cells">
+      <div class="cell">
+        <div class="cell-label">双色原字</div>
+        <div class="preview"><span class="sample v-dual" style="font-family:F_comfortaa"><i>ABN</i><b>CMS</b></span></div>
+        <div class="actual"><span class="sample v-dual" style="font-family:F_comfortaa"><i>ABN</i><b>CMS</b></span></div>
+        <div class="cell-desc">ABN 橙 / CMS 灰，字体原貌</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">收紧字距</div>
+        <div class="preview"><span class="sample v-tight" style="font-family:F_comfortaa">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-tight" style="font-family:F_comfortaa">ABNCMS</span></div>
+        <div class="cell-desc">字距 -0.06em，稍加粗，更凝聚</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">微斜切</div>
+        <div class="preview"><span class="sample v-slant" style="font-family:F_comfortaa">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-slant" style="font-family:F_comfortaa">ABNCMS</span></div>
+        <div class="cell-desc">整体 skewX(-7°)，带速度感</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">反白徽章</div>
+        <div class="preview"><span class="sample v-badge" style="font-family:F_comfortaa">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-badge" style="font-family:F_comfortaa">ABNCMS</span></div>
+        <div class="cell-desc">橙色圆角底 + 反白字</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">单色橙点</div>
+        <div class="preview"><span class="sample v-dot" style="font-family:F_comfortaa">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-dot" style="font-family:F_comfortaa">ABNCMS</span></div>
+        <div class="cell-desc">全深灰 + 末尾橙色圆点</div>
+      </div></div>
+  </section>
+
+  <section class="font-row">
+    <h2>Baloo 2 <span class="badge">700</span></h2>
+    <p class="style">厚圆童趣，最圆润的一档</p>
+    <div class="cells">
+      <div class="cell">
+        <div class="cell-label">双色原字</div>
+        <div class="preview"><span class="sample v-dual" style="font-family:F_baloo-2"><i>ABN</i><b>CMS</b></span></div>
+        <div class="actual"><span class="sample v-dual" style="font-family:F_baloo-2"><i>ABN</i><b>CMS</b></span></div>
+        <div class="cell-desc">ABN 橙 / CMS 灰，字体原貌</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">收紧字距</div>
+        <div class="preview"><span class="sample v-tight" style="font-family:F_baloo-2">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-tight" style="font-family:F_baloo-2">ABNCMS</span></div>
+        <div class="cell-desc">字距 -0.06em，稍加粗，更凝聚</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">微斜切</div>
+        <div class="preview"><span class="sample v-slant" style="font-family:F_baloo-2">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-slant" style="font-family:F_baloo-2">ABNCMS</span></div>
+        <div class="cell-desc">整体 skewX(-7°)，带速度感</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">反白徽章</div>
+        <div class="preview"><span class="sample v-badge" style="font-family:F_baloo-2">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-badge" style="font-family:F_baloo-2">ABNCMS</span></div>
+        <div class="cell-desc">橙色圆角底 + 反白字</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">单色橙点</div>
+        <div class="preview"><span class="sample v-dot" style="font-family:F_baloo-2">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-dot" style="font-family:F_baloo-2">ABNCMS</span></div>
+        <div class="cell-desc">全深灰 + 末尾橙色圆点</div>
+      </div></div>
+  </section>
+
+  <section class="font-row">
+    <h2>Fredoka <span class="badge">600</span></h2>
+    <p class="style">现代圆润，轻快利落</p>
+    <div class="cells">
+      <div class="cell">
+        <div class="cell-label">双色原字</div>
+        <div class="preview"><span class="sample v-dual" style="font-family:F_fredoka"><i>ABN</i><b>CMS</b></span></div>
+        <div class="actual"><span class="sample v-dual" style="font-family:F_fredoka"><i>ABN</i><b>CMS</b></span></div>
+        <div class="cell-desc">ABN 橙 / CMS 灰，字体原貌</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">收紧字距</div>
+        <div class="preview"><span class="sample v-tight" style="font-family:F_fredoka">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-tight" style="font-family:F_fredoka">ABNCMS</span></div>
+        <div class="cell-desc">字距 -0.06em，稍加粗，更凝聚</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">微斜切</div>
+        <div class="preview"><span class="sample v-slant" style="font-family:F_fredoka">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-slant" style="font-family:F_fredoka">ABNCMS</span></div>
+        <div class="cell-desc">整体 skewX(-7°)，带速度感</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">反白徽章</div>
+        <div class="preview"><span class="sample v-badge" style="font-family:F_fredoka">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-badge" style="font-family:F_fredoka">ABNCMS</span></div>
+        <div class="cell-desc">橙色圆角底 + 反白字</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">单色橙点</div>
+        <div class="preview"><span class="sample v-dot" style="font-family:F_fredoka">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-dot" style="font-family:F_fredoka">ABNCMS</span></div>
+        <div class="cell-desc">全深灰 + 末尾橙色圆点</div>
+      </div></div>
+  </section>
+
+  <section class="font-row">
+    <h2>Varela Round <span class="badge">400</span></h2>
+    <p class="style">圆角收尾，朴素耐看</p>
+    <div class="cells">
+      <div class="cell">
+        <div class="cell-label">双色原字</div>
+        <div class="preview"><span class="sample v-dual" style="font-family:F_varela-round"><i>ABN</i><b>CMS</b></span></div>
+        <div class="actual"><span class="sample v-dual" style="font-family:F_varela-round"><i>ABN</i><b>CMS</b></span></div>
+        <div class="cell-desc">ABN 橙 / CMS 灰，字体原貌</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">收紧字距</div>
+        <div class="preview"><span class="sample v-tight" style="font-family:F_varela-round">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-tight" style="font-family:F_varela-round">ABNCMS</span></div>
+        <div class="cell-desc">字距 -0.06em，稍加粗，更凝聚</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">微斜切</div>
+        <div class="preview"><span class="sample v-slant" style="font-family:F_varela-round">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-slant" style="font-family:F_varela-round">ABNCMS</span></div>
+        <div class="cell-desc">整体 skewX(-7°)，带速度感</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">反白徽章</div>
+        <div class="preview"><span class="sample v-badge" style="font-family:F_varela-round">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-badge" style="font-family:F_varela-round">ABNCMS</span></div>
+        <div class="cell-desc">橙色圆角底 + 反白字</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">单色橙点</div>
+        <div class="preview"><span class="sample v-dot" style="font-family:F_varela-round">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-dot" style="font-family:F_varela-round">ABNCMS</span></div>
+        <div class="cell-desc">全深灰 + 末尾橙色圆点</div>
+      </div></div>
+  </section>
+
+  <section class="font-row">
+    <h2>Poppins <span class="badge">700</span></h2>
+    <p class="style">几何圆润，结构最规整</p>
+    <div class="cells">
+      <div class="cell">
+        <div class="cell-label">双色原字</div>
+        <div class="preview"><span class="sample v-dual" style="font-family:F_poppins"><i>ABN</i><b>CMS</b></span></div>
+        <div class="actual"><span class="sample v-dual" style="font-family:F_poppins"><i>ABN</i><b>CMS</b></span></div>
+        <div class="cell-desc">ABN 橙 / CMS 灰，字体原貌</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">收紧字距</div>
+        <div class="preview"><span class="sample v-tight" style="font-family:F_poppins">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-tight" style="font-family:F_poppins">ABNCMS</span></div>
+        <div class="cell-desc">字距 -0.06em，稍加粗，更凝聚</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">微斜切</div>
+        <div class="preview"><span class="sample v-slant" style="font-family:F_poppins">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-slant" style="font-family:F_poppins">ABNCMS</span></div>
+        <div class="cell-desc">整体 skewX(-7°)，带速度感</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">反白徽章</div>
+        <div class="preview"><span class="sample v-badge" style="font-family:F_poppins">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-badge" style="font-family:F_poppins">ABNCMS</span></div>
+        <div class="cell-desc">橙色圆角底 + 反白字</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">单色橙点</div>
+        <div class="preview"><span class="sample v-dot" style="font-family:F_poppins">ABNCMS</span></div>
+        <div class="actual"><span class="sample v-dot" style="font-family:F_poppins">ABNCMS</span></div>
+        <div class="cell-desc">全深灰 + 末尾橙色圆点</div>
+      </div></div>
+  </section>
+</body></html>

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 196 64" role="img" aria-label="ABNCMS">
+  
+  <g transform="translate(8,10)"><path d="M0 40 L13 4 H22 L9 40 Z M18 4 H27 L40 40 H31 Z" fill="#ff6a1a"/><path d="M7 27 H33 V34 H7 Z" fill="#ff6a1a"/></g>
+  <g transform="translate(54,12) scale(0.62)">
+    <path d="M0 52 L10 12 H15 L5 52 Z M16 12 H21 L27 52 H22 Z M7 38 H20 V45 H7 Z" transform="translate(0,0)" fill="#24272b"/>
+    <path d="M0 12 H13 C21 12 25 16 25 22 C25 26 23 29 19 31 C24 32 27 36 27 42 C27 49 22 52 13 52 H0 Z M9 20 V27 H12 C15 27 16 25 16 23.5 C16 22 15 20 12 20 Z M9 35 V44 H13 C16 44 18 42 18 39.5 C18 37 16 35 13 35 Z" transform="translate(30,0)" fill="#24272b"/>
+    <path d="M0 52 V12 H8 L20 36 V12 H26 V52 H18 L6 28 V52 Z" transform="translate(60,0)" fill="#24272b"/>
+    <path d="M26 20 C23 14 18 12 12 12 C5 12 0 19 0 32 C0 45 5 52 12 52 C18 52 23 50 26 44 L18 40 C17 43 15 44 12 44 C9 44 8 40 8 32 C8 24 9 20 12 20 C15 20 17 21 18 24 Z" transform="translate(92,0)" fill="#24272b"/>
+    <path d="M0 52 V12 H9 L15 33 L21 12 H30 V52 H22 V27 L17 45 H13 L8 27 V52 Z" transform="translate(121,0)" fill="#24272b"/>
+    <path d="M22 19 C19 15 15 14 11 14 C6 14 4 17 4 22 C4 27 9 30 15 31 C21 32 24 35 24 41 C24 46 20 49 14 49 C9 49 6 47 4 43" transform="translate(154,0)" fill="none" stroke="#24272b" stroke-width="7" stroke-linecap="butt" stroke-linejoin="round"/>
+  </g>
+</svg>
