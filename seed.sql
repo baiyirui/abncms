@@ -24,7 +24,7 @@ VALUES
   ('footer_text',       'Powered by ABNCMS · Cloudflare Workers + D1'),
   ('posts_per_page',    '10'),
   ('allow_comments',    '1'),
-  ('analytics_enabled', '1'),
+  ('analytics_enabled', '0'),
   ('analytics_script',  ''),
   ('site_logo',         ''),
   ('site_logo_height',  '36'),

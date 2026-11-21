@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 );
 
 INSERT OR IGNORE INTO settings (key, value) VALUES
-  ('analytics_enabled', '1'),
+  ('analytics_enabled', '0'),
   ('site_logo',         ''),
   ('site_logo_height',  '36'),
   ('imgbed_base_url',   ''),

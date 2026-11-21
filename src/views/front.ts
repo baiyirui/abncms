@@ -76,10 +76,29 @@ export function sidebarHtml(s: SideData): string {
 }`
 }
 
-/** 列表式文章条目：标题 + 摘要 + meta（作者/日期/阅读量），有封面时左侧缩略图 */
+/** 无封面时随机兜底的预置缩略图（时尚免版权图，本地 /images/），共 8 张 */
+const FALLBACK_THUMBS = [
+  '/images/thumb-1.jpg',
+  '/images/thumb-3.jpg',
+  '/images/thumb-4.jpg',
+  '/images/thumb-5.jpg',
+  '/images/thumb-6.jpg',
+  '/images/thumb-7.jpg',
+  '/images/thumb-9.jpg',
+  '/images/thumb-10.jpg'
+]
+
+/** 根据文章稳定 id 取一张兜底图：同一文章始终同一张，不同文章均匀分散 */
+function fallbackThumb(p: PostRow): string {
+  const n = p.id > 0 ? p.id : [...p.slug].reduce((a, c) => a + c.charCodeAt(0), 0)
+  return FALLBACK_THUMBS[n % FALLBACK_THUMBS.length]
+}
+
+/** 列表式文章条目：标题 + 摘要 + meta（作者/日期/阅读量），无封面时用预置图兜底 */
 function postItem(p: PostRow): string {
+  const thumb = p.cover || fallbackThumb(p)
   return `<article class="card post-item">
-  ${p.cover ? `<a class="thumb" href="/p/${esc(p.slug)}.html"><img src="${esc(p.cover)}" alt="${esc(p.title)}" loading="lazy"></a>` : ''}
+  <a class="thumb" href="/p/${esc(p.slug)}.html"><img src="${esc(thumb)}" alt="${esc(p.title)}" loading="lazy"></a>
   <div class="body">
     <h2><a href="/p/${esc(p.slug)}.html">${esc(p.title)}</a></h2>
     <p class="excerpt">${esc(p.excerpt || p.ai_summary || '')}</p>
@@ -102,14 +121,14 @@ export function home(o: {
   settings: SiteSettings
   side: SideData
 }): string {
-  // 顶部横幅始终显示：有封面文章用其封面，否则用内置 banner.svg 兜底，
+  // 顶部横幅：两张时尚免版权图自动轮换（CSS 淡入淡出），
   // 文案显示置顶文章标题（或站点名 + 描述），让首页第一眼就有视觉焦点。
   const bannerPost = o.posts.find((p) => p.pinned) || o.posts[0]
-  const bannerImg = bannerPost?.cover || '/banner.svg'
   const bannerText = bannerPost ? bannerPost.title : o.settings.site_name
   const bannerSub = bannerPost ? '' : o.settings.site_description
-  const banner = `<a class="banner" href="${bannerPost ? '/p/' + esc(bannerPost.slug) + '.html' : '/'}">
-  <img src="${esc(bannerImg)}" alt="${esc(bannerText)}">
+  const banner = `<a class="banner banner-slides" href="${bannerPost ? '/p/' + esc(bannerPost.slug) + '.html' : '/'}">
+  <img class="slide s1" src="/images/banner-1.jpg" alt="${esc(bannerText)}" fetchpriority="high">
+  <img class="slide s2" src="/images/banner-2.jpg" alt="${esc(bannerText)}">
   <span class="cap">${esc(bannerText)}${bannerSub ? `<small>${esc(bannerSub)}</small>` : ''}</span>
 </a>`
   const body = `
@@ -269,9 +288,10 @@ export function postPage(o: {
 }): string {
   const p = o.post
   const tsOff = !o.siteKey || /^(off|none|disabled)$/i.test(o.siteKey)
+  const articleImg = p.cover || fallbackThumb(p)
   const head = `<meta property="og:title" content="${esc(p.title)}">
 <meta property="og:description" content="${esc(p.excerpt || p.ai_summary)}">
-${p.cover ? `<meta property="og:image" content="${esc(p.cover)}">` : ''}
+<meta property="og:image" content="${esc(articleImg)}">
 <script type="application/ld+json">${JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'BlogPosting',
@@ -293,7 +313,7 @@ ${p.cover ? `<meta property="og:image" content="${esc(p.cover)}">` : ''}
     </div>
     <h1>${esc(p.title)}</h1>
   </div>
-  ${p.cover ? `<img src="${esc(p.cover)}" alt="${esc(p.title)}" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:20px">` : ''}
+  <img src="${esc(articleImg)}" alt="${esc(p.title)}" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:20px">
   ${p.excerpt ? `<div class="intro-box"><div class="t">导语</div>${esc(p.excerpt)}</div>` : ''}
   ${p.ai_summary ? `<div class="card pad" style="background:var(--accent-soft);border-color:transparent"><div class="small" style="font-weight:600;color:var(--accent);margin-bottom:4px">AI 摘要</div>${esc(p.ai_summary)}</div>` : ''}
   <div class="prose">${p.content_html}</div>

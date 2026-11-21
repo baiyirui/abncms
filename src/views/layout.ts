@@ -64,12 +64,18 @@ img{max-width:100%;height:auto}
 .w-post .v{font-size:12px;color:var(--faint);flex-shrink:0}
 .w-cats{display:flex;flex-wrap:wrap;gap:8px}
 
-/* ── 顶部横幅（置顶/带封面文章） ── */
-.banner{display:block;position:relative;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:20px}
-.banner img{width:100%;aspect-ratio:21/8;object-fit:cover;display:block}
-.banner .cap{position:absolute;left:0;right:0;bottom:0;padding:38px 18px 13px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.58));color:#fff;font-size:16.5px;font-weight:620;letter-spacing:-.01em}
+/* ── 顶部横幅（两张时尚图自动轮换） ── */
+.banner{display:block;position:relative;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:20px;aspect-ratio:21/8}
+.banner img{width:100%;height:100%;aspect-ratio:auto;object-fit:cover;display:block}
+.banner .cap{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:38px 18px 13px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.58));color:#fff;font-size:16.5px;font-weight:620;letter-spacing:-.01em}
 .banner .cap small{display:block;font-size:13px;font-weight:400;opacity:.88;margin-top:3px}
-@media(max-width:720px){.banner img{aspect-ratio:16/9}}
+/* 双图叠加：默认 s1 显示，s2 透明；两者交替淡入淡出 */
+.banner-slides .slide{position:absolute;inset:0;opacity:0;animation:bannerFade 14s ease-in-out infinite}
+.banner-slides .s1{opacity:1;animation-delay:0s}
+.banner-slides .s2{animation-delay:-7s}
+@keyframes bannerFade{0%,45%{opacity:1}50%,95%{opacity:0}100%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.banner-slides .slide{animation:none}.banner-slides .s1{opacity:1}.banner-slides .s2{display:none}}
+@media(max-width:720px){.banner{aspect-ratio:16/9}}
 
 /* ── 卡片 / 按钮 ── */
 .btn{

@@ -30,6 +30,9 @@ Thumbs.db
 .idea/
 .vscode/
 
+# WorkBuddy 内部记忆（不入库）
+.workbuddy/
+
 # LOGO 候选：字体依赖体积大，用 npm install 复原，不入库
 **/node_modules/
 design/font-logo-options/package-lock.json
