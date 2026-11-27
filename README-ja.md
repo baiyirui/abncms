@@ -11,7 +11,7 @@
 [![Node.js 20+](https://img.shields.io/badge/Node.js-20%2B-339933.svg)](https://nodejs.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/baiyirui/abncms/pulls)
 
-[公式サイト Website](https://cms.abn.cn) · [開発ドキュメント Docs](https://cms.abn.cn/docs.html) · [オンラインデモ Demo](https://abncms.eu.cc) · [GitHub](https://github.com/baiyirui/abncms) · [メール Email](mailto:a@abn.cn)
+[公式サイト Website](https://cms.abn.cn) · [開発ドキュメント Docs](https://cms.abn.cn/docs.html) · [オンラインデモ Demo](https://abncms.883663.xyz) · [GitHub](https://github.com/baiyirui/abncms) · [メール Email](mailto:a@abn.cn)
 
 <br/>
 
@@ -144,7 +144,7 @@ abncms/
 | 製品公式サイト | https://cms.abn.cn |
 | 開発ドキュメント（中文） | https://cms.abn.cn/docs.html |
 | Documentation (EN) | https://cms.abn.cn/docs-en.html |
-| オンラインデモ | https://abncms.eu.cc |
+| オンラインデモ | https://abncms.883663.xyz |
 | GitHub ソースコード | https://github.com/baiyirui/abncms |
 | 課題・バグ報告 | https://github.com/baiyirui/abncms/issues |
 | 連絡先メール | a@abn.cn |
